@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import {
   Bus,
   Car,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   Construction,
   Footprints,
@@ -31,9 +32,19 @@ const legendItems = [
   { label: "Info Lainnya", color: "var(--gray)", icon: Info },
 ];
 
-export default function Sidebar() {
-  const [active, setActive] = useState("peta");
+interface SidebarProps {
+  active: string;
+  onNavigate: (key: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
 
+export default function Sidebar({
+  active,
+  onNavigate,
+  collapsed,
+  onToggleCollapsed,
+}: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -51,7 +62,7 @@ export default function Sidebar() {
           <div
             key={key}
             className={`nav-item${active === key ? " active" : ""}`}
-            onClick={() => setActive(key)}
+            onClick={() => onNavigate(key)}
           >
             <Icon width={17} height={17} />
             <span className="label">{label}</span>
@@ -85,6 +96,15 @@ export default function Sidebar() {
       <div className="sidebar-footer">
         <Info width={14} height={14} />
         <span>Tentang Aplikasi</span>
+      </div>
+
+      <div className="sidebar-collapse-btn" onClick={onToggleCollapsed}>
+        {collapsed ? (
+          <ChevronRight width={14} height={14} />
+        ) : (
+          <ChevronLeft width={14} height={14} />
+        )}
+        <span>Sembunyikan Menu</span>
       </div>
     </aside>
   );

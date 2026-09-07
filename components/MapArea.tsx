@@ -13,17 +13,28 @@ import {
   Search,
   Sparkles,
   Sun,
-  User,
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
-import type { LayerDef } from "@/lib/types";
+import type { LayerDef, PoiPin, ReportPin } from "@/lib/types";
 import type { MapViewHandle } from "./MapView";
 import FeedPanel from "./FeedPanel";
+import PoiPopup from "./PoiPopup";
+import TripPlannerModal from "./TripPlannerModal";
+import ThreadDetailModal from "./ThreadDetailModal";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
-export default function MapArea() {
+interface MapAreaProps {
+  showPlanner: boolean;
+  onClosePlanner: () => void;
+}
+
+export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
   const [layerDefs, setLayerDefs] = useState<LayerDef[]>(initialLayerDefs);
+  const [activePoi, setActivePoi] = useState<{ poi: PoiPin; x: number; y: number } | null>(
+    null
+  );
+  const [activeThread, setActiveThread] = useState<ReportPin | null>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
 
   const toggleLayer = (key: string) => {
@@ -44,6 +55,9 @@ export default function MapArea() {
         onReady={(handle) => {
           handleRef.current = handle;
         }}
+        onPoiClick={(poi, x, y) =>
+          setActivePoi({ poi, x, y: Math.max(y, 220) })
+        }
       />
 
       <div className="top-bar">
@@ -55,22 +69,31 @@ export default function MapArea() {
           </div>
           <button
             className="plan-btn"
-            onClick={() => handleRef.current?.flashRoute()}
+            onClick={() => {
+              handleRef.current?.flashRoute();
+            }}
           >
-            <Sparkles width={15} height={15} /> Rencanakan Trip
+            <span>Rencanakan Trip</span> <Sparkles width={15} height={15} />
           </button>
         </div>
         <div className="top-right">
           <div className="pill">
             <Sun width={15} height={15} /> Siang hari
+            <ChevronDown width={12} height={12} />
           </div>
           <div className="icon-btn">
             <Bell width={18} height={18} />
             <span className="badge">3</span>
           </div>
-          <div className="avatar">
-            <User width={19} height={19} />
-          </div>
+          <div
+            className="avatar"
+            style={{
+              backgroundImage:
+                "url(https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=200&q=80)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          />
         </div>
       </div>
 
@@ -96,20 +119,59 @@ export default function MapArea() {
         <ChevronDown width={13} height={13} />
       </div>
 
-      <div className="zoom-ctrl">
-        <div className="zoom-btn" onClick={() => handleRef.current?.zoomIn()}>
+      <div className="map-controls-cluster">
+        <div
+          className="ctrl-btn locate"
+          onClick={() => handleRef.current?.locate()}
+        >
+          <LocateFixed width={16} height={16} />
+        </div>
+        <div className="ctrl-divider" />
+        <div className="ctrl-btn" onClick={() => handleRef.current?.zoomIn()}>
           <Plus width={17} height={17} />
         </div>
-        <div className="zoom-btn" onClick={() => handleRef.current?.zoomOut()}>
+        <div className="ctrl-btn" onClick={() => handleRef.current?.zoomOut()}>
           <Minus width={17} height={17} />
         </div>
-        <div className="zoom-btn">
-          <LocateFixed width={16} height={16} />
+        <div className="ctrl-divider" />
+        <div className="ctrl-btn">
+          <Layers width={16} height={16} />
         </div>
       </div>
       <div className="scale-tag">200 m</div>
 
-      <FeedPanel />
+      <FeedPanel onOpenThread={setActiveThread} />
+
+      <div className="map-footer">
+        <span>Sumber data: Survey Tim NGEBOLANG &amp; Open Data</span>
+        <span className="brand-mini">NGEBOLANG</span>
+      </div>
+
+      {activePoi && (
+        <PoiPopup
+          poi={activePoi.poi}
+          x={activePoi.x}
+          y={activePoi.y}
+          onClose={() => setActivePoi(null)}
+        />
+      )}
+
+      {showPlanner && (
+        <TripPlannerModal
+          onClose={onClosePlanner}
+          onViewOnMap={() => {
+            handleRef.current?.flashRoute();
+            onClosePlanner();
+          }}
+        />
+      )}
+
+      {activeThread && (
+        <ThreadDetailModal
+          report={activeThread}
+          onClose={() => setActiveThread(null)}
+        />
+      )}
     </main>
   );
 }

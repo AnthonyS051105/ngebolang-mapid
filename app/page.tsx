@@ -1,13 +1,5 @@
-import Sidebar from "@/components/Sidebar";
-import MapArea from "@/components/MapArea";
-import RightPanel from "@/components/RightPanel";
+import AppShell from "@/components/AppShell";
 
 export default function Home() {
-  return (
-    <div className="app">
-      <Sidebar />
-      <MapArea />
-      <RightPanel />
-    </div>
-  );
+  return <AppShell />;
 }

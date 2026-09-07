@@ -39,16 +39,26 @@ export const routeLine: [number, number][] = [
 
 export const reportPins: ReportPin[] = [
   {
+    id: "r1",
     cat: "jalan_rusak",
     lat: -7.7965,
     lng: 110.3653,
     title: "Trotoar rusak di depan Pasar Beringharjo",
     loc: "Jl. Malioboro",
-    time: "15 menit lalu",
+    time: "2 jam lalu",
     likes: 32,
     comments: 5,
+    photo:
+      "https://images.unsplash.com/photo-1515162305285-0293e4767cc2?w=800&q=80",
+    description:
+      "Trotoar berlubang dan tidak rata, menyulitkan pejalan kaki, terutama lansia dan pengguna kursi roda.",
+    commentList: [
+      { author: "Dewi A.", text: "Setuju, saya juga hampir kepeleset di sini.", time: "1 jam lalu" },
+      { author: "Rizal P.", text: "Sudah lama begini, semoga cepat diperbaiki.", time: "40 menit lalu" },
+    ],
   },
   {
+    id: "r2",
     cat: "kemacetan",
     lat: -7.801,
     lng: 110.3648,
@@ -57,8 +67,16 @@ export const reportPins: ReportPin[] = [
     time: "30 menit lalu",
     likes: 24,
     comments: 3,
+    photo:
+      "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800&q=80",
+    description:
+      "Kemacetan cukup parah saat jam pulang kerja, kendaraan menumpuk hingga ke persimpangan.",
+    commentList: [
+      { author: "Anton S.", text: "Mending lewat jalur alternatif dulu.", time: "15 menit lalu" },
+    ],
   },
   {
+    id: "r3",
     cat: "halte_penuh",
     lat: -7.7935,
     lng: 110.366,
@@ -67,8 +85,16 @@ export const reportPins: ReportPin[] = [
     time: "45 menit lalu",
     likes: 18,
     comments: 2,
+    photo:
+      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=800&q=80",
+    description:
+      "Antrean penumpang mengular hingga keluar halte, disarankan menunggu di halte berikutnya.",
+    commentList: [
+      { author: "Nadia K.", text: "Iya tadi saya nunggu 20 menit lebih.", time: "20 menit lalu" },
+    ],
   },
   {
+    id: "r4",
     cat: "trotoar_terhalang",
     lat: -7.794,
     lng: 110.3648,
@@ -77,8 +103,16 @@ export const reportPins: ReportPin[] = [
     time: "1 jam lalu",
     likes: 15,
     comments: 1,
+    photo:
+      "https://images.unsplash.com/photo-1533900298318-6b8da08a523e?w=800&q=80",
+    description:
+      "Lapak pedagang kaki lima menutup separuh badan trotoar sehingga pejalan kaki harus turun ke jalan raya.",
+    commentList: [
+      { author: "Yusuf H.", text: "Perlu ditertibkan Satpol PP.", time: "35 menit lalu" },
+    ],
   },
   {
+    id: "r5",
     cat: "info",
     lat: -7.8035,
     lng: 110.3636,
@@ -87,8 +121,13 @@ export const reportPins: ReportPin[] = [
     time: "1 jam lalu",
     likes: 8,
     comments: 0,
+    photo:
+      "https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=800&q=80",
+    description: "Fasilitas toilet umum terawat baik dan gratis untuk wisatawan.",
+    commentList: [],
   },
   {
+    id: "r6",
     cat: "jalan_rusak",
     lat: -7.7845,
     lng: 110.368,
@@ -97,8 +136,15 @@ export const reportPins: ReportPin[] = [
     time: "2 jam lalu",
     likes: 11,
     comments: 2,
+    photo:
+      "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&q=80",
+    description: "Lubang cukup dalam, berisiko bagi pengendara motor saat malam hari.",
+    commentList: [
+      { author: "Sari M.", text: "Sudah ada yang jatuh gara-gara ini.", time: "1 jam lalu" },
+    ],
   },
   {
+    id: "r7",
     cat: "halte_penuh",
     lat: -7.79,
     lng: 110.3665,
@@ -107,8 +153,15 @@ export const reportPins: ReportPin[] = [
     time: "2 jam lalu",
     likes: 9,
     comments: 1,
+    photo:
+      "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80",
+    description: "Antrean panjang terutama pada akhir pekan dan jam sibuk.",
+    commentList: [
+      { author: "Budi T.", text: "Perlu tambahan armada di jam sibuk.", time: "1 jam lalu" },
+    ],
   },
   {
+    id: "r8",
     cat: "trotoar_terhalang",
     lat: -7.8,
     lng: 110.366,
@@ -117,6 +170,12 @@ export const reportPins: ReportPin[] = [
     time: "3 jam lalu",
     likes: 14,
     comments: 4,
+    photo:
+      "https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&q=80",
+    description: "Motor parkir sembarangan di atas trotoar, memaksa pejalan kaki turun ke jalan.",
+    commentList: [
+      { author: "Lia W.", text: "Setiap akhir pekan selalu begini.", time: "2 jam lalu" },
+    ],
   },
 ];
 
@@ -132,12 +191,86 @@ export const heatSpots: HeatSpot[] = [
 ];
 
 export const poiPins: PoiPin[] = [
-  { icon: "circle-parking", lat: -7.791, lng: 110.3675, label: "Parkir" },
-  { icon: "toilet", lat: -7.7975, lng: 110.366, label: "Toilet" },
-  { icon: "bike", lat: -7.7935, lng: 110.3648, label: "Pangkalan Becak" },
-  { icon: "bike", lat: -7.8, lng: 110.363, label: "Pangkalan Andong" },
-  { icon: "bus", lat: -7.793, lng: 110.3662, label: "Halte Malioboro 2" },
-  { icon: "bus", lat: -7.79, lng: 110.3663, label: "Halte Malioboro 1" },
+  {
+    id: "poi1",
+    icon: "circle-parking",
+    lat: -7.791,
+    lng: 110.3675,
+    label: "Parkir Abu Bakar Ali",
+    photo:
+      "https://images.unsplash.com/photo-1590674899484-13da0d1b0483?w=800&q=80",
+    category: "Parkir",
+    condition: "Normal",
+    facilities: ["Motor", "Mobil", "Atap"],
+    updatedAt: "10 menit lalu",
+  },
+  {
+    id: "poi2",
+    icon: "toilet",
+    lat: -7.7975,
+    lng: 110.366,
+    label: "Toilet Umum Malioboro",
+    photo:
+      "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
+    category: "Toilet",
+    condition: "Normal",
+    facilities: ["Difabel", "Air bersih"],
+    updatedAt: "20 menit lalu",
+  },
+  {
+    id: "poi3",
+    icon: "bike",
+    lat: -7.7935,
+    lng: 110.3648,
+    label: "Pangkalan Becak Malioboro",
+    photo:
+      "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80",
+    category: "Pangkalan Becak/Andong",
+    condition: "Ramai",
+    facilities: ["Becak", "Tarif tetap"],
+    updatedAt: "5 menit lalu",
+  },
+  {
+    id: "poi4",
+    icon: "bike",
+    lat: -7.8,
+    lng: 110.363,
+    label: "Pangkalan Andong Alun-alun",
+    photo:
+      "https://images.unsplash.com/photo-1596397249129-c7a8f8173e34?w=800&q=80",
+    category: "Pangkalan Becak/Andong",
+    condition: "Normal",
+    facilities: ["Andong", "Tarif tetap"],
+    updatedAt: "30 menit lalu",
+  },
+  {
+    id: "poi5",
+    icon: "bus",
+    lat: -7.793,
+    lng: 110.3662,
+    label: "Halte Malioboro 2",
+    photo:
+      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=800&q=80",
+    category: "Halte Trans Jogja",
+    routes: ["1A", "2A", "3A", "6A"],
+    condition: "Ramai",
+    facilities: ["Kursi tunggu", "Difabel", "Atap"],
+    updatedAt: "15 menit lalu",
+  },
+  {
+    id: "poi6",
+    icon: "bus",
+    lat: -7.79,
+    lng: 110.3663,
+    label: "Halte Malioboro 1",
+    photo:
+      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=800&q=80",
+    category: "Halte Trans Jogja",
+    routes: ["1A", "2B", "4A"],
+    condition: "Normal",
+    facilities: ["Kursi tunggu", "Atap"],
+    updatedAt: "8 menit lalu",
+  },
 ];
 
 export const tripSteps: TripStep[] = [

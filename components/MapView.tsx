@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import * as Icons from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type L from "leaflet";
 import {
   CAT,
@@ -13,36 +10,31 @@ import {
   reportPins,
   routeLine,
 } from "@/lib/data";
-import type { LayerDef } from "@/lib/types";
-
-function getIcon(name: string): LucideIcon {
-  const pascal = name
-    .split("-")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join("");
-  return (Icons as unknown as Record<string, LucideIcon>)[pascal] ?? Icons.Circle;
-}
-
-function iconMarkup(name: string, props: Record<string, unknown>) {
-  const Icon = getIcon(name);
-  return renderToStaticMarkup(<Icon {...props} />);
-}
+import { iconMarkup } from "@/lib/icons";
+import type { LayerDef, PoiPin } from "@/lib/types";
 
 export interface MapViewHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   setLayerVisible: (key: string, visible: boolean) => void;
   flashRoute: () => void;
+  locate: () => void;
 }
 
 interface MapViewProps {
   layerDefs: LayerDef[];
   onReady?: (handle: MapViewHandle) => void;
+  onPoiClick?: (poi: PoiPin, x: number, y: number) => void;
 }
 
-export default function MapView({ layerDefs, onReady }: MapViewProps) {
+export default function MapView({ layerDefs, onReady, onPoiClick }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
+  const onPoiClickRef = useRef(onPoiClick);
+
+  useEffect(() => {
+    onPoiClickRef.current = onPoiClick;
+  }, [onPoiClick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +75,7 @@ export default function MapView({ layerDefs, onReady }: MapViewProps) {
 
       const routeLayer = L.polyline(routeLine, {
         color: "#2f7cf6",
-        weight: 4,
+        weight: 5,
         dashArray: "2,10",
         lineCap: "round",
       }).addTo(map);
@@ -138,11 +130,11 @@ export default function MapView({ layerDefs, onReady }: MapViewProps) {
         const c = CAT[r.cat];
         const icon = L.divIcon({
           className: "",
-          iconAnchor: [15, 30],
-          iconSize: [30, 30],
-          html: `<div class="pin" style="background:${c.color}"><span>${iconMarkup(
+          iconAnchor: [17, 34],
+          iconSize: [34, 34],
+          html: `<div class="pin" style="width:34px;height:34px;background:${c.color}"><span>${iconMarkup(
             c.icon,
-            { width: 14, height: 14, color: "#fff" }
+            { width: 16, height: 16, color: "#fff" }
           )}</span></div>`,
         });
         L.marker([r.lat, r.lng], { icon })
@@ -155,14 +147,18 @@ export default function MapView({ layerDefs, onReady }: MapViewProps) {
       poiPins.forEach((p) => {
         const icon = L.divIcon({
           className: "",
-          iconAnchor: [15, 30],
-          iconSize: [30, 30],
-          html: `<div class="pin" style="background:#ffffff;border-color:#d7dbe2"><span>${iconMarkup(
+          iconAnchor: [17, 34],
+          iconSize: [34, 34],
+          html: `<div class="pin" style="width:34px;height:34px;background:#ffffff;border-color:#d7dbe2"><span>${iconMarkup(
             p.icon,
-            { width: 14, height: 14, color: "#4b5563" }
+            { width: 16, height: 16, color: "#4b5563" }
           )}</span></div>`,
         });
-        L.marker([p.lat, p.lng], { icon }).bindPopup(p.label).addTo(poiLayer);
+        const marker = L.marker([p.lat, p.lng], { icon }).addTo(poiLayer);
+        marker.on("click", (e) => {
+          const point = map.latLngToContainerPoint(e.latlng);
+          onPoiClickRef.current?.(p, point.x, point.y - 20);
+        });
       });
       poiLayer.addTo(map);
 
@@ -186,8 +182,11 @@ export default function MapView({ layerDefs, onReady }: MapViewProps) {
           else map.removeLayer(layer);
         },
         flashRoute: () => {
-          routeLayer.setStyle({ color: "#1ea34c" });
+          routeLayer.setStyle({ color: "#1d4ed8" });
           setTimeout(() => routeLayer.setStyle({ color: "#2f7cf6" }), 700);
+        },
+        locate: () => {
+          map.setView([-7.793, 110.365], 15);
         },
       });
     })();

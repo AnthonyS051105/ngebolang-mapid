@@ -14,7 +14,11 @@ import { tripSteps } from "@/lib/data";
 
 const stepIcons = { footprints: Footprints, bike: Bike } as const;
 
-export default function RightPanel() {
+interface RightPanelProps {
+  onPlanTrip: () => void;
+}
+
+export default function RightPanel({ onPlanTrip }: RightPanelProps) {
   return (
     <aside className="right-panel">
       <div className="rp-header">
@@ -79,7 +83,9 @@ export default function RightPanel() {
         </span>
       </div>
 
-      <button className="btn-primary">Lihat Detail Rute di Peta</button>
+      <button className="btn-primary" onClick={onPlanTrip}>
+        Lihat Detail Rute di Peta
+      </button>
       <button
         className="btn-outline"
         style={{
@@ -117,7 +123,7 @@ export default function RightPanel() {
         </div>
         <div className="info-cell">
           <div className="ic">
-            <Bike width={19} height={19} color="#1ea34c" />
+            <Bike width={19} height={19} color="#2563eb" />
           </div>
           <div className="val">26</div>
           <div className="lab">Becak Tersedia</div>
