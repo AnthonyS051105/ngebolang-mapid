@@ -1424,6 +1424,53 @@ svg.lucide {
   margin-bottom: 18px;
 }
 
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f7f8fa;
+  padding: 24px;
+}
+.auth-field {
+  margin-bottom: 16px;
+}
+.auth-input {
+  width: 100%;
+  border: 1.5px solid var(--card-border);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+}
+.auth-input:focus {
+  border-color: var(--green);
+}
+.auth-error {
+  background: #fdecec;
+  color: #b3261e;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.auth-switch {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555d6e;
+}
+.auth-switch a {
+  color: var(--green-dark);
+  font-weight: 800;
+  text-decoration: none;
+}
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
 /* POI info card popup (floating over map, not full backdrop) */
 .poi-popup {
   position: absolute;
