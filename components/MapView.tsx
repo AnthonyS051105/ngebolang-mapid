@@ -6,12 +6,12 @@ import {
   CAT,
   heatSpots,
   places,
-  poiPins,
   reportPins,
   routeLine,
 } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
-import type { LayerDef, PoiPin } from "@/lib/types";
+import type { LayerDef } from "@/lib/types";
+import type { PoiItem } from "@/lib/types/routingApi";
 
 export interface MapViewHandle {
   zoomIn: () => void;
@@ -23,13 +23,38 @@ export interface MapViewHandle {
 
 interface MapViewProps {
   layerDefs: LayerDef[];
+  poiItems: PoiItem[];
   onReady?: (handle: MapViewHandle) => void;
-  onPoiClick?: (poi: PoiPin, x: number, y: number) => void;
+  onPoiClick?: (poi: PoiItem, x: number, y: number) => void;
 }
 
-export default function MapView({ layerDefs, onReady, onPoiClick }: MapViewProps) {
+const POI_CATEGORY_ICON: Record<string, string> = {
+  heritage: "landmark",
+  landmark: "landmark",
+  market: "store",
+  museum: "building-2",
+  attraction: "sparkles",
+  shopping: "shopping-bag",
+  culture: "theater",
+  transit: "bus",
+  education: "graduation-cap",
+  public_space: "trees",
+  facility: "circle-parking",
+  toilet: "toilet",
+  parking: "circle-parking",
+  worship: "landmark",
+  security: "shield",
+};
+
+function iconForPoiCategory(category: string) {
+  return POI_CATEGORY_ICON[category.toLowerCase()] ?? "map-pin";
+}
+
+export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
+  const leafletModuleRef = useRef<typeof L | null>(null);
+  const poiLayerRef = useRef<L.LayerGroup | null>(null);
   const onPoiClickRef = useRef(onPoiClick);
 
   useEffect(() => {
@@ -43,6 +68,7 @@ export default function MapView({ layerDefs, onReady, onPoiClick }: MapViewProps
       const leaflet = await import("leaflet");
       const L = leaflet.default;
       if (cancelled || !mapRef.current) return;
+      leafletModuleRef.current = L;
 
       const map = L.map(mapRef.current, {
         zoomControl: false,
@@ -144,23 +170,8 @@ export default function MapView({ layerDefs, onReady, onPoiClick }: MapViewProps
       reportLayer.addTo(map);
 
       const poiLayer = L.layerGroup();
-      poiPins.forEach((p) => {
-        const icon = L.divIcon({
-          className: "",
-          iconAnchor: [17, 34],
-          iconSize: [34, 34],
-          html: `<div class="pin" style="width:34px;height:34px;background:#ffffff;border-color:#d7dbe2"><span>${iconMarkup(
-            p.icon,
-            { width: 16, height: 16, color: "#4b5563" }
-          )}</span></div>`,
-        });
-        const marker = L.marker([p.lat, p.lng], { icon }).addTo(poiLayer);
-        marker.on("click", (e) => {
-          const point = map.latLngToContainerPoint(e.latlng);
-          onPoiClickRef.current?.(p, point.x, point.y - 20);
-        });
-      });
       poiLayer.addTo(map);
+      poiLayerRef.current = poiLayer;
 
       const layerMap: Record<string, L.LayerGroup> = {
         heatmap: heatLayer,
@@ -198,6 +209,31 @@ export default function MapView({ layerDefs, onReady, onPoiClick }: MapViewProps
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    const map = leafletMapRef.current;
+    const poiLayer = poiLayerRef.current;
+    if (!L || !map || !poiLayer) return;
+
+    poiLayer.clearLayers();
+    poiItems.forEach((p) => {
+      const icon = L.divIcon({
+        className: "",
+        iconAnchor: [17, 34],
+        iconSize: [34, 34],
+        html: `<div class="pin" style="width:34px;height:34px;background:#ffffff;border-color:#d7dbe2"><span>${iconMarkup(
+          iconForPoiCategory(p.category),
+          { width: 16, height: 16, color: "#4b5563" }
+        )}</span></div>`,
+      });
+      const marker = L.marker([p.lat, p.lon], { icon }).addTo(poiLayer);
+      marker.on("click", (e) => {
+        const point = map.latLngToContainerPoint(e.latlng);
+        onPoiClickRef.current?.(p, point.x, point.y - 20);
+      });
+    });
+  }, [poiItems]);
 
   return <div id="map" ref={mapRef} />;
 }

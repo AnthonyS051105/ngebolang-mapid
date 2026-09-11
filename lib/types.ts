@@ -47,20 +47,6 @@ export interface HeatSpot {
   c: string;
 }
 
-export interface PoiPin {
-  id: string;
-  icon: string;
-  lat: number;
-  lng: number;
-  label: string;
-  photo: string;
-  category: string;
-  routes?: string[];
-  condition: "Normal" | "Ramai" | "Tutup";
-  facilities: string[];
-  updatedAt: string;
-}
-
 export interface TripStep {
   icon: string;
   label: string;

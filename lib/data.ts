@@ -4,7 +4,6 @@ import type {
   HeatSpot,
   LayerDef,
   Place,
-  PoiPin,
   ReportPin,
   TripStep,
 } from "./types";
@@ -188,89 +187,6 @@ export const heatSpots: HeatSpot[] = [
   { lat: -7.7895, lng: 110.3675, r: 150, c: "#22c55e" },
   { lat: -7.8035, lng: 110.362, r: 170, c: "#22c55e" },
   { lat: -7.79, lng: 110.362, r: 150, c: "#22c55e" },
-];
-
-export const poiPins: PoiPin[] = [
-  {
-    id: "poi1",
-    icon: "circle-parking",
-    lat: -7.791,
-    lng: 110.3675,
-    label: "Parkir Abu Bakar Ali",
-    photo:
-      "https://images.unsplash.com/photo-1590674899484-13da0d1b0483?w=800&q=80",
-    category: "Parkir",
-    condition: "Normal",
-    facilities: ["Motor", "Mobil", "Atap"],
-    updatedAt: "10 menit lalu",
-  },
-  {
-    id: "poi2",
-    icon: "toilet",
-    lat: -7.7975,
-    lng: 110.366,
-    label: "Toilet Umum Malioboro",
-    photo:
-      "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
-    category: "Toilet",
-    condition: "Normal",
-    facilities: ["Difabel", "Air bersih"],
-    updatedAt: "20 menit lalu",
-  },
-  {
-    id: "poi3",
-    icon: "bike",
-    lat: -7.7935,
-    lng: 110.3648,
-    label: "Pangkalan Becak Malioboro",
-    photo:
-      "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80",
-    category: "Pangkalan Becak/Andong",
-    condition: "Ramai",
-    facilities: ["Becak", "Tarif tetap"],
-    updatedAt: "5 menit lalu",
-  },
-  {
-    id: "poi4",
-    icon: "bike",
-    lat: -7.8,
-    lng: 110.363,
-    label: "Pangkalan Andong Alun-alun",
-    photo:
-      "https://images.unsplash.com/photo-1596397249129-c7a8f8173e34?w=800&q=80",
-    category: "Pangkalan Becak/Andong",
-    condition: "Normal",
-    facilities: ["Andong", "Tarif tetap"],
-    updatedAt: "30 menit lalu",
-  },
-  {
-    id: "poi5",
-    icon: "bus",
-    lat: -7.793,
-    lng: 110.3662,
-    label: "Halte Malioboro 2",
-    photo:
-      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=800&q=80",
-    category: "Halte Trans Jogja",
-    routes: ["1A", "2A", "3A", "6A"],
-    condition: "Ramai",
-    facilities: ["Kursi tunggu", "Difabel", "Atap"],
-    updatedAt: "15 menit lalu",
-  },
-  {
-    id: "poi6",
-    icon: "bus",
-    lat: -7.79,
-    lng: 110.3663,
-    label: "Halte Malioboro 1",
-    photo:
-      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=800&q=80",
-    category: "Halte Trans Jogja",
-    routes: ["1A", "2B", "4A"],
-    condition: "Normal",
-    facilities: ["Kursi tunggu", "Atap"],
-    updatedAt: "8 menit lalu",
-  },
 ];
 
 export const tripSteps: TripStep[] = [

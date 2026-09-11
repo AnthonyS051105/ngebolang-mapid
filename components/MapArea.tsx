@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Bell,
@@ -15,7 +15,9 @@ import {
   Sun,
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
-import type { LayerDef, PoiPin, ReportPin } from "@/lib/types";
+import type { LayerDef, ReportPin } from "@/lib/types";
+import { fetchPoi } from "@/lib/api/routingClient";
+import type { PoiItem } from "@/lib/types/routingApi";
 import type { MapViewHandle } from "./MapView";
 import FeedPanel from "./FeedPanel";
 import PoiPopup from "./PoiPopup";
@@ -31,11 +33,26 @@ interface MapAreaProps {
 
 export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
   const [layerDefs, setLayerDefs] = useState<LayerDef[]>(initialLayerDefs);
-  const [activePoi, setActivePoi] = useState<{ poi: PoiPin; x: number; y: number } | null>(
+  const [poiItems, setPoiItems] = useState<PoiItem[]>([]);
+  const [activePoi, setActivePoi] = useState<{ poi: PoiItem; x: number; y: number } | null>(
     null
   );
   const [activeThread, setActiveThread] = useState<ReportPin | null>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPoi()
+      .then((items) => {
+        if (!cancelled) setPoiItems(items);
+      })
+      .catch((err) => {
+        console.error("Gagal memuat POI dari backend:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleLayer = (key: string) => {
     setLayerDefs((prev) =>
@@ -52,6 +69,7 @@ export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
     <main className="map-area">
       <MapView
         layerDefs={initialLayerDefs}
+        poiItems={poiItems}
         onReady={(handle) => {
           handleRef.current = handle;
         }}
