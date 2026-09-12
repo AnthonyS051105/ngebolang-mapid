@@ -1,22 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Sidebar from "./Sidebar";
-import MapArea from "./MapArea";
-import RightPanel from "./RightPanel";
+import MapArea, { type MapAreaHandle } from "./MapArea";
+import ChatPanel from "./ChatPanel";
 import ReportComposerModal from "./ReportComposerModal";
 import MobileBottomNav from "./MobileBottomNav";
+import type { RouteResponse } from "@/lib/types/routingApi";
+import type { RouteDisplayOptions } from "./MapView";
 
 export default function AppShell() {
   const [active, setActive] = useState("peta");
   const [collapsed, setCollapsed] = useState(false);
   const [showPlanner, setShowPlanner] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
+  const mapAreaRef = useRef<MapAreaHandle | null>(null);
 
   const handleNavigate = (key: string) => {
     setActive(key);
     if (key === "planner") setShowPlanner(true);
     if (key === "lapor") setShowComposer(true);
+  };
+
+  const handleViewRouteOnMap = (routeData: RouteResponse, options?: RouteDisplayOptions) => {
+    mapAreaRef.current?.showRoute(routeData, options);
   };
 
   return (
@@ -28,10 +35,13 @@ export default function AppShell() {
         onToggleCollapsed={() => setCollapsed((v) => !v)}
       />
       <MapArea
+        ref={mapAreaRef}
         showPlanner={showPlanner}
         onClosePlanner={() => setShowPlanner(false)}
       />
-      <RightPanel onPlanTrip={() => setShowPlanner(true)} />
+      <div className="right-panel">
+        <ChatPanel onViewRouteOnMap={handleViewRouteOnMap} />
+      </div>
 
       {showComposer && (
         <ReportComposerModal

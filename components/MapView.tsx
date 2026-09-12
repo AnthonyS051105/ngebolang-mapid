@@ -1,24 +1,24 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type L from "leaflet";
-import {
-  CAT,
-  heatSpots,
-  places,
-  reportPins,
-  routeLine,
-} from "@/lib/data";
+import { CAT, heatSpots, places, reportPins } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
 import type { LayerDef } from "@/lib/types";
 import type { PoiItem } from "@/lib/types/routingApi";
+
+export interface RouteDisplayOptions {
+  walkOnly?: boolean;
+  ramahAksesibilitas?: boolean;
+}
 
 export interface MapViewHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   setLayerVisible: (key: string, visible: boolean) => void;
-  flashRoute: () => void;
   locate: () => void;
+  showRoute: (geojson: GeoJSON.FeatureCollection, options?: RouteDisplayOptions) => void;
+  clearRoute: () => void;
 }
 
 interface MapViewProps {
@@ -55,7 +55,9 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletModuleRef = useRef<typeof L | null>(null);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeApiLayerRef = useRef<L.LayerGroup | null>(null);
   const onPoiClickRef = useRef(onPoiClick);
+  const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
 
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
@@ -98,25 +100,6 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
         }).addTo(heatLayer);
       });
       heatLayer.addTo(map);
-
-      const routeLayer = L.polyline(routeLine, {
-        color: "#2f7cf6",
-        weight: 5,
-        dashArray: "2,10",
-        lineCap: "round",
-      }).addTo(map);
-      routeLine.forEach((p, i) => {
-        if (i === 0 || i === routeLine.length - 1) {
-          L.circleMarker(p, {
-            radius: 6,
-            color: "#2f7cf6",
-            weight: 3,
-            fillColor: "#fff",
-            fillOpacity: 1,
-            pane: "markerPane",
-          }).addTo(map);
-        }
-      });
 
       const placeLayer = L.layerGroup();
       places.forEach((p) => {
@@ -173,6 +156,10 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
       poiLayer.addTo(map);
       poiLayerRef.current = poiLayer;
 
+      const routeApiLayer = L.layerGroup();
+      routeApiLayer.addTo(map);
+      routeApiLayerRef.current = routeApiLayer;
+
       const layerMap: Record<string, L.LayerGroup> = {
         heatmap: heatLayer,
         reports: reportLayer,
@@ -192,12 +179,61 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
           if (visible) layer.addTo(map);
           else map.removeLayer(layer);
         },
-        flashRoute: () => {
-          routeLayer.setStyle({ color: "#1d4ed8" });
-          setTimeout(() => routeLayer.setStyle({ color: "#2f7cf6" }), 700);
-        },
         locate: () => {
           map.setView([-7.793, 110.365], 15);
+        },
+        showRoute: (routeGeojson, options) => {
+          const layer = routeApiLayerRef.current;
+          if (!layer) return;
+          layer.clearLayers();
+
+          const walkOnly = options?.walkOnly ?? false;
+          const ramahAksesibilitas = options?.ramahAksesibilitas ?? false;
+          setActiveRouteMode(walkOnly ? "walk_only" : ramahAksesibilitas ? "accessible" : null);
+
+          const geoJsonLayer = L.geoJSON(routeGeojson, {
+            style: (feature) => {
+              const style = feature?.properties?.style as
+                | { color?: string; weight?: number; opacity?: number; dashArray?: string | null }
+                | undefined;
+              // Indikator preferensi aktif menimpa gaya per-mode dari backend:
+              // walk_only -> garis putus-putus (dashArray), ramah_aksesibilitas -> kuning + lebih tebal.
+              if (ramahAksesibilitas) {
+                return {
+                  color: "#eab308",
+                  weight: (style?.weight ?? 5) + 1,
+                  opacity: style?.opacity ?? 0.9,
+                  dashArray: undefined,
+                  lineCap: "round",
+                };
+              }
+              return {
+                color: style?.color ?? "#2f7cf6",
+                weight: style?.weight ?? 5,
+                opacity: style?.opacity ?? 0.9,
+                dashArray: walkOnly ? "6, 8" : style?.dashArray ?? undefined,
+                lineCap: "round",
+              };
+            },
+            pointToLayer: (feature, latlng) =>
+              L.circleMarker(latlng, {
+                radius: 6,
+                color: ramahAksesibilitas
+                  ? "#eab308"
+                  : (feature?.properties?.color as string) ?? "#2f7cf6",
+                weight: 3,
+                fillColor: "#fff",
+                fillOpacity: 1,
+              }),
+          });
+          geoJsonLayer.addTo(layer);
+
+          const bounds = geoJsonLayer.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60] });
+        },
+        clearRoute: () => {
+          routeApiLayerRef.current?.clearLayers();
+          setActiveRouteMode(null);
         },
       });
     })();
@@ -235,5 +271,14 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
     });
   }, [poiItems]);
 
-  return <div id="map" ref={mapRef} />;
+  return (
+    <>
+      <div id="map" ref={mapRef} />
+      {activeRouteMode && (
+        <div className={`route-mode-badge route-mode-badge-${activeRouteMode}`}>
+          {activeRouteMode === "walk_only" ? "Mode: Jalan Kaki Saja" : "Mode: Ramah Aksesibilitas"}
+        </div>
+      )}
+    </>
+  );
 }

@@ -32,21 +32,46 @@ export interface RouteRequestBody {
   waypoints?: WaypointItem[];
 }
 
+// Bentuk NYATA dari graphapp/formatter.py (bukan `type`/`instruction` seperti dulu
+// ditulis di docs/PYTHON_API_CONTRACT.md) -- dikonfirmasi lewat panggilan langsung ke
+// POST /api/route dan /api/chat (route_data), lihat mode_label & "step" (bukan array index).
+export type RouteStepMode =
+  | "walk"
+  | "feeder"
+  | "transfer_board"
+  | "transfer_alight"
+  | "ojol"
+  | "bus"
+  | "car"
+  | "waypoint_stop"
+  | string; // backend tidak memakai Literal -- nilai lain bisa muncul (mis. Trans Jogja)
+
 export interface RouteStep {
-  type: "walk" | "feeder" | "ojol" | "bus" | "car";
-  instruction: string;
-  distance_m: number;
+  step: number;
+  mode: RouteStepMode;
+  mode_label: string;
+  summary: string;
+  distance_m?: number;
   time_min: number;
+  cost_idr: number;
+  pangkalan?: string;
 }
 
 export interface CostRange {
   min_idr: number;
   max_idr: number;
   expected_idr: number;
+  model_source?: "trained_linear_regression" | "profile_heuristic" | "fallback" | string;
 }
 
 export interface RouteResponse {
   status: "success" | "error";
+  parameters?: {
+    preference: string;
+    budget_max: number | null;
+    feeder_type: string;
+    is_weekend: boolean;
+  };
   origin: { name: string; lat: number; lon: number };
   destination: { name: string; lat: number; lon: number };
   summary: {
@@ -55,6 +80,9 @@ export interface RouteResponse {
     total_cost_idr: number;
     has_feeder: boolean;
     feeder_type: string | null;
+    is_weekend?: boolean;
+    preference?: string;
+    budget_max?: number | null;
     cost_range: CostRange;
     bargaining_tip: string;
     recommendation: string;
@@ -84,12 +112,20 @@ export interface TarifResponse {
 }
 
 export interface ChatResponse {
+  status: "success";
+  session_id: string;
   reply: string;
   intent: string; // NILAI ASLI dari llmapp/agent.py, BUKAN 4 kategori PRD -- jangan diasumsikan
   route_data: RouteResponse | null;
   suggestions: string[];
   ui_card: { card_type: string; title?: string; [key: string]: unknown } | null;
   model: string;
+}
+
+export interface ChatErrorResponse {
+  status: "error";
+  session_id: string;
+  message: string;
 }
 
 export interface ThreadItem {

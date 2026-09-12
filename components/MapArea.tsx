@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Bell,
@@ -17,8 +17,8 @@ import {
 import { layerDefs as initialLayerDefs } from "@/lib/data";
 import type { LayerDef, ReportPin } from "@/lib/types";
 import { fetchPoi } from "@/lib/api/routingClient";
-import type { PoiItem } from "@/lib/types/routingApi";
-import type { MapViewHandle } from "./MapView";
+import type { PoiItem, RouteResponse } from "@/lib/types/routingApi";
+import type { MapViewHandle, RouteDisplayOptions } from "./MapView";
 import FeedPanel from "./FeedPanel";
 import PoiPopup from "./PoiPopup";
 import TripPlannerModal from "./TripPlannerModal";
@@ -26,12 +26,16 @@ import ThreadDetailModal from "./ThreadDetailModal";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
+export interface MapAreaHandle {
+  showRoute: (routeData: RouteResponse, options?: RouteDisplayOptions) => void;
+}
+
 interface MapAreaProps {
   showPlanner: boolean;
   onClosePlanner: () => void;
 }
 
-export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
+function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<MapAreaHandle>) {
   const [layerDefs, setLayerDefs] = useState<LayerDef[]>(initialLayerDefs);
   const [poiItems, setPoiItems] = useState<PoiItem[]>([]);
   const [activePoi, setActivePoi] = useState<{ poi: PoiItem; x: number; y: number } | null>(
@@ -39,6 +43,12 @@ export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
   );
   const [activeThread, setActiveThread] = useState<ReportPin | null>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    showRoute: (routeData: RouteResponse, options?: RouteDisplayOptions) => {
+      handleRef.current?.showRoute(routeData.geojson, options);
+    },
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +95,7 @@ export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
             <div className="q">Cari tujuan &amp; budget...</div>
             <div className="hint">Contoh: Dari Tugu ke Kraton, budget 50rb</div>
           </div>
-          <button
-            className="plan-btn"
-            onClick={() => {
-              handleRef.current?.flashRoute();
-            }}
-          >
+          <button className="plan-btn">
             <span>Rencanakan Trip</span> <Sparkles width={15} height={15} />
           </button>
         </div>
@@ -175,13 +180,7 @@ export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
       )}
 
       {showPlanner && (
-        <TripPlannerModal
-          onClose={onClosePlanner}
-          onViewOnMap={() => {
-            handleRef.current?.flashRoute();
-            onClosePlanner();
-          }}
-        />
+        <TripPlannerModal onClose={onClosePlanner} onViewOnMap={onClosePlanner} />
       )}
 
       {activeThread && (
@@ -193,3 +192,5 @@ export default function MapArea({ showPlanner, onClosePlanner }: MapAreaProps) {
     </main>
   );
 }
+
+export default forwardRef(MapArea);
