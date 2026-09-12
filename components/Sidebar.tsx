@@ -3,9 +3,8 @@
 import {
   Bus,
   Car,
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
+  ChevronsLeft,
+  ChevronsRight,
   Construction,
   Footprints,
   Info,
@@ -15,13 +14,13 @@ import {
   SquarePen,
   Sparkles,
 } from "lucide-react";
+import type { AppShellUser } from "./AppShell";
 
 const navItems = [
   { key: "peta", label: "Peta Utama", icon: Map },
   { key: "planner", label: "AI Trip Planner", icon: Sparkles },
   { key: "feed", label: "Feed Threads", icon: MessageSquare },
   { key: "lapor", label: "Buat Laporan", icon: SquarePen },
-  { key: "about", label: "Tentang NGEBOLANG", icon: CircleHelp },
 ];
 
 const legendItems = [
@@ -37,6 +36,7 @@ interface SidebarProps {
   onNavigate: (key: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  user: AppShellUser;
 }
 
 export default function Sidebar({
@@ -44,6 +44,7 @@ export default function Sidebar({
   onNavigate,
   collapsed,
   onToggleCollapsed,
+  user,
 }: SidebarProps) {
   return (
     <aside className="sidebar">
@@ -51,10 +52,23 @@ export default function Sidebar({
         <div className="brand-logo">
           <Leaf width={18} height={18} color="#ffffff" />
         </div>
-        <div>
+        <div className="brand-text">
           <div className="brand-name">NGEBOLANG</div>
           <div className="brand-sub">Peta Sosial Mobilitas</div>
         </div>
+        <button
+          type="button"
+          className="sidebar-collapse-icon-btn"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? "Perluas menu" : "Ciutkan menu"}
+          title={collapsed ? "Perluas menu" : "Ciutkan menu"}
+        >
+          {collapsed ? (
+            <ChevronsRight width={16} height={16} />
+          ) : (
+            <ChevronsLeft width={16} height={16} />
+          )}
+        </button>
       </div>
 
       <nav className="nav">
@@ -63,6 +77,7 @@ export default function Sidebar({
             key={key}
             className={`nav-item${active === key ? " active" : ""}`}
             onClick={() => onNavigate(key)}
+            title={label}
           >
             <Icon width={17} height={17} />
             <span className="label">{label}</span>
@@ -94,17 +109,11 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <Info width={14} height={14} />
-        <span>Tentang Aplikasi</span>
-      </div>
-
-      <div className="sidebar-collapse-btn" onClick={onToggleCollapsed}>
-        {collapsed ? (
-          <ChevronRight width={14} height={14} />
-        ) : (
-          <ChevronLeft width={14} height={14} />
-        )}
-        <span>Sembunyikan Menu</span>
+        <div className="sidebar-user-avatar">{user.namaTampilan.charAt(0).toUpperCase()}</div>
+        <div className="sidebar-user-info">
+          <span className="sidebar-user-name">{user.namaTampilan}</span>
+          <span className="sidebar-user-email">{user.email}</span>
+        </div>
       </div>
     </aside>
   );

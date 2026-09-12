@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircleMore, Send, Sparkles } from "lucide-react";
+import { MessageCircleMore, Minus, Send, Sparkles, X } from "lucide-react";
 import { fetchChat, fetchRoute } from "@/lib/api/routingClient";
 import { getOrCreateChatSessionId } from "@/lib/api/chatSession";
 import type { RouteResponse } from "@/lib/types/routingApi";
@@ -26,9 +26,11 @@ const DEFAULT_PREFERENCE: RoutePreferenceState = {
 
 interface ChatPanelProps {
   onViewRouteOnMap?: (routeData: RouteResponse, options?: RouteDisplayOptions) => void;
+  onMinimize?: () => void;
+  onClose?: () => void;
 }
 
-export default function ChatPanel({ onViewRouteOnMap }: ChatPanelProps) {
+export default function ChatPanel({ onViewRouteOnMap, onMinimize, onClose }: ChatPanelProps) {
   const [sessionId, setSessionId] = useState("");
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [input, setInput] = useState("");
@@ -173,6 +175,32 @@ export default function ChatPanel({ onViewRouteOnMap }: ChatPanelProps) {
           <Sparkles width={17} height={17} />
         </div>
         <h2>AI Trip Planner</h2>
+        {(onMinimize || onClose) && (
+          <div className="chat-panel-header-actions">
+            {onMinimize && (
+              <button
+                type="button"
+                className="panel-action-btn"
+                onClick={onMinimize}
+                aria-label="Ciutkan AI Trip Planner"
+                title="Ciutkan"
+              >
+                <Minus width={15} height={15} />
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                className="panel-action-btn"
+                onClick={onClose}
+                aria-label="Tutup AI Trip Planner"
+                title="Tutup"
+              >
+                <X width={15} height={15} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="pref-panel-wrap">

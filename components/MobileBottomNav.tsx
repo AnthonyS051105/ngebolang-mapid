@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Map, Plus, Sparkles } from "lucide-react";
+import { MessageSquare, Map, Plus } from "lucide-react";
 
 interface MobileBottomNavProps {
   active: string;
@@ -8,6 +8,9 @@ interface MobileBottomNavProps {
   onFabClick: () => void;
 }
 
+// Navbar mobile sengaja hanya 3 item (Peta / Buat Laporan / Feed) -- AI Trip
+// Planner dibuka dari search-card di top-bar peta, atau dari tombol khusus
+// di atas panel Feed, bukan dari tab navbar (permintaan eksplisit user).
 export default function MobileBottomNav({
   active,
   onNavigate,
@@ -19,27 +22,19 @@ export default function MobileBottomNav({
         className={`mnav-item${active === "peta" ? " active" : ""}`}
         onClick={() => onNavigate("peta")}
       >
-        <Map width={19} height={19} />
+        <Map width={20} height={20} />
         Peta
       </div>
-      <div
-        className={`mnav-item${active === "planner" ? " active" : ""}`}
-        onClick={() => onNavigate("planner")}
-      >
-        <Sparkles width={19} height={19} />
-        Planner
-      </div>
-      <div className="mnav-fab" onClick={onFabClick}>
-        <Plus width={22} height={22} />
+      <div className="mnav-fab" onClick={onFabClick} role="button" aria-label="Buat laporan baru">
+        <Plus width={24} height={24} />
       </div>
       <div
         className={`mnav-item${active === "feed" ? " active" : ""}`}
         onClick={() => onNavigate("feed")}
       >
-        <MessageSquare width={19} height={19} />
+        <MessageSquare width={20} height={20} />
         Feed
       </div>
-      <div style={{ flex: 1 }} />
     </div>
   );
 }

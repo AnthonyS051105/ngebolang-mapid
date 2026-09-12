@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Camera, MapPin, SquarePen, X } from "lucide-react";
 import { CAT } from "@/lib/data";
 import { getIcon } from "@/lib/icons";
@@ -47,6 +47,8 @@ export default function ReportComposerModal({
 }: ReportComposerModalProps) {
   const [selectedCat, setSelectedCat] = useState<CategoryKey>("Jalan Rusak");
   const [description, setDescription] = useState("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ status: SubmitThreadResult["status"]; reason?: string } | null>(
     null
@@ -64,6 +66,7 @@ export default function ReportComposerModal({
         description: description.trim(),
         lat: DEFAULT_LAT,
         lon: DEFAULT_LON,
+        ...(photoDataUrl ? { photo_url: photoDataUrl } : {}),
       });
       setResult({ status: res.status, reason: res.moderation_reason });
       if (res.status === "APPROVED" || res.status === "MERGED_DUPLICATE") {
@@ -119,10 +122,49 @@ export default function ReportComposerModal({
 
           <span className="composer-label">Foto</span>
           <div className="composer-photo-row">
-            <div className="composer-photo-add">
-              <Camera width={18} height={18} />
-              Tambah Foto
-            </div>
+            {photoDataUrl && (
+              <div className="composer-photo-thumb-wrap">
+                <div
+                  className="composer-photo-thumb"
+                  style={{ backgroundImage: `url(${photoDataUrl})` }}
+                />
+                <button
+                  type="button"
+                  className="composer-photo-remove"
+                  onClick={() => {
+                    setPhotoDataUrl(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  aria-label="Hapus foto"
+                >
+                  <X width={12} height={12} />
+                </button>
+              </div>
+            )}
+            {!photoDataUrl && (
+              <div
+                className="composer-photo-add"
+                onClick={() => fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                <Camera width={18} height={18} />
+                Tambah Foto
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => setPhotoDataUrl(reader.result as string);
+                reader.readAsDataURL(file);
+              }}
+            />
           </div>
 
           <span className="composer-label">Deskripsi</span>

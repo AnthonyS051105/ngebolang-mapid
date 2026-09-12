@@ -42,6 +42,15 @@ body {
   grid-template-columns: 248px 1fr 356px;
   height: 100vh;
   width: 100vw;
+  transition: grid-template-columns 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* AI Trip Planner panel is closed by default -- map takes the freed column
+   so the app doesn't default to "everything open at once". */
+.app.planner-closed {
+  grid-template-columns: 248px 1fr;
+}
+.app.sidebar-collapsed.planner-closed {
+  grid-template-columns: 76px 1fr;
 }
 
 /* ============ SIDEBAR ============ */
@@ -230,7 +239,41 @@ svg.lucide {
   border-top: 1px solid var(--sidebar-border);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+.sidebar-user-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+.sidebar-user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+.sidebar-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dfe3ea;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-user-email {
+  font-size: 10.5px;
+  color: var(--sidebar-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============ MAP AREA ============ */
@@ -269,12 +312,21 @@ svg.lucide {
   flex: 1;
   max-width: 640px;
   background: #fff;
+  border: none;
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(20, 30, 20, 0.14);
   padding: 11px 12px 11px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.search-card:hover {
+  box-shadow: 0 12px 34px rgba(20, 30, 20, 0.2);
+  transform: translateY(-1px);
 }
 .search-icon {
   color: #9aa2b1;
@@ -370,8 +422,85 @@ svg.lucide {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #7a3b28;
   flex: none;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.avatar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(20, 30, 20, 0.18);
+}
+
+.user-menu {
+  position: relative;
+}
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 520;
+  width: 220px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(20, 30, 20, 0.2);
+  overflow: hidden;
+  animation: user-menu-in 0.15s ease-out;
+}
+@keyframes user-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.user-menu-info {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--card-border);
+}
+.user-menu-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1c2230;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-menu-email {
+  font-size: 11.5px;
+  color: #8b93a7;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.user-menu-item:hover {
+  background: #fdeceb;
+}
+.user-menu-item:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .layer-card {
@@ -510,6 +639,7 @@ svg.lucide {
 .feed-top {
   display: flex;
   align-items: center;
+  gap: 10px;
   margin-bottom: 10px;
 }
 .feed-top h3 {
@@ -517,14 +647,49 @@ svg.lucide {
   font-weight: 800;
   color: #1c2230;
   margin: 0;
+  flex: 1;
+  min-width: 0;
 }
-.feed-top a {
-  margin-left: auto;
+.feed-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.feed-planner-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--green-light);
+  color: var(--green-dark);
+  border: none;
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.15s;
+}
+.feed-planner-trigger:hover {
+  background: #dbe7fd;
+  transform: translateY(-1px);
+}
+.feed-see-all {
+  background: none;
+  border: none;
   font-size: 12px;
   color: var(--green);
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
+  padding: 4px 2px;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.feed-see-all:hover {
+  color: var(--green-dark);
+  text-decoration: underline;
 }
 .feed-tabs {
   display: flex;
@@ -542,14 +707,24 @@ svg.lucide {
   cursor: pointer;
   flex: none;
   white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover {
+  background: #e7eaee;
 }
 .tab.active {
   background: var(--green);
   color: #fff;
 }
+.tab.active:hover {
+  background: var(--green-dark);
+}
 .sort {
+  position: relative;
   margin-left: auto;
   flex: none;
+}
+.sort-trigger {
   font-size: 11.8px;
   font-weight: 700;
   color: #555d6e;
@@ -560,6 +735,39 @@ svg.lucide {
   align-items: center;
   gap: 5px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.sort-trigger:hover {
+  background: #e7eaee;
+}
+.sort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 520;
+  width: 130px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(20, 30, 20, 0.18);
+  overflow: hidden;
+  animation: user-menu-in 0.15s ease-out;
+}
+.sort-menu-item {
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3a4152;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sort-menu-item:hover {
+  background: #f1f3f6;
+}
+.sort-menu-item.active {
+  color: var(--green-dark);
+  font-weight: 800;
+  background: var(--green-light);
 }
 .feed-cards {
   display: flex;
@@ -679,6 +887,45 @@ svg.lucide {
   background: #2f7cf6;
 }
 
+/* ============ FLOATING PANEL CONTROLS (shared) ============
+   Small icon buttons used to minimize/close floating/dockable panels
+   (AI Trip Planner, Feed Threads, Kontrol Layer) -- keeps the UI
+   uncluttered by default per PRODUCT.md "progressive, not noisy by
+   default" principle. */
+.panel-action-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #8b93a7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.panel-action-btn:hover {
+  background: #f1f3f6;
+  color: #3a4152;
+}
+.floating-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.floating-panel-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #1c2230;
+}
+
 /* ============ RIGHT PANEL: AI TRIP PLANNER ============ */
 .right-panel {
   background: #fff;
@@ -687,6 +934,50 @@ svg.lucide {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.right-panel.minimized {
+  width: auto;
+  border-left: none;
+  align-items: flex-start;
+  padding: 16px;
+  background: transparent;
+  pointer-events: none;
+}
+.right-panel-restore,
+.feed-panel-restore {
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #1c2230;
+  box-shadow: 0 8px 20px rgba(20, 30, 20, 0.14);
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.right-panel-restore:hover,
+.feed-panel-restore:hover {
+  box-shadow: 0 10px 26px rgba(20, 30, 20, 0.2);
+  transform: translateY(-1px);
+}
+.right-panel-restore::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
+}
+.feed-panel-restore {
+  position: absolute;
+  left: 18px;
+  bottom: 34px;
+  z-index: 490;
 }
 .rp-header {
   display: flex;
@@ -854,6 +1145,10 @@ svg.lucide {
   font-weight: 800;
   margin-bottom: 9px;
   cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-primary:active {
+  transform: scale(0.98);
 }
 .btn-primary:hover {
   background: var(--green-dark);
@@ -869,6 +1164,10 @@ svg.lucide {
   font-weight: 800;
   margin-bottom: 20px;
   cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.btn-outline:active {
+  transform: scale(0.98);
 }
 .btn-outline:hover {
   border-color: #c7cbd4;
@@ -907,16 +1206,17 @@ svg.lucide {
   margin-top: 2px;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Scrollbars are hidden everywhere -- content stays scrollable (mouse
+   wheel, trackpad, touch, keyboard), only the visual track/thumb is
+   suppressed, per explicit design request to keep the UI uncluttered. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-::-webkit-scrollbar-thumb {
-  background: #c9cdd6;
-  border-radius: 10px;
-}
-.sidebar::-webkit-scrollbar-thumb {
-  background: #2a2f3d;
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (max-width: 1100px) {
@@ -941,17 +1241,58 @@ svg.lucide {
 }
 
 /* ============ SIDEBAR COLLAPSE ============ */
+/* Toggle lives as a small icon button on the brand row (top-right of the
+   "NGEBOLANG" wordmark), not a text row at the bottom of the sidebar --
+   easier to reach without scrolling, and reads as a standard app affordance. */
+.brand {
+  justify-content: space-between;
+}
+.brand-text {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-collapse-icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--sidebar-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sidebar-collapse-icon-btn:hover {
+  background: #1d2230;
+  color: #dfe3ea;
+}
+
 .app.sidebar-collapsed {
   grid-template-columns: 76px 1fr 356px;
 }
-.app.sidebar-collapsed .brand-name,
-.app.sidebar-collapsed .brand-sub,
+.app.sidebar-collapsed .brand {
+  justify-content: center;
+}
+.app.sidebar-collapsed .brand-text,
 .app.sidebar-collapsed .nav-item span.label,
 .app.sidebar-collapsed .side-title,
 .app.sidebar-collapsed .legend-row span,
 .app.sidebar-collapsed .density-box,
-.app.sidebar-collapsed .sidebar-footer span {
+.app.sidebar-collapsed .sidewalk-legend,
+.app.sidebar-collapsed .sidebar-user-info {
   display: none;
+}
+.app.sidebar-collapsed .sidebar-collapse-icon-btn {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+.app.sidebar-collapsed .brand {
+  position: relative;
 }
 .app.sidebar-collapsed .nav-item {
   justify-content: center;
@@ -959,26 +1300,51 @@ svg.lucide {
 .app.sidebar-collapsed .legend-row {
   justify-content: center;
 }
-.sidebar-collapse-btn {
-  margin-top: 10px;
-  padding: 10px 4px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--sidebar-text-dim);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  border-top: 1px solid var(--sidebar-border);
-}
-.sidebar-collapse-btn:hover {
-  color: #c3c9d6;
-}
-.app.sidebar-collapsed .sidebar-collapse-btn {
+.app.sidebar-collapsed .sidebar-footer {
   justify-content: center;
 }
-.app.sidebar-collapsed .sidebar-collapse-btn span {
-  display: none;
+
+/* Hover-to-peek: hovering a collapsed sidebar's edge temporarily expands it
+   as an overlay, without shifting the map/panel layout underneath. */
+.app.sidebar-collapsed .sidebar {
+  transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s;
+  width: 76px;
+}
+.app.sidebar-collapsed .sidebar:hover {
+  width: 248px;
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
+  z-index: 700;
+  position: relative;
+}
+.app.sidebar-collapsed .sidebar:hover .brand-text,
+.app.sidebar-collapsed .sidebar:hover .nav-item span.label,
+.app.sidebar-collapsed .sidebar:hover .side-title,
+.app.sidebar-collapsed .sidebar:hover .legend-row span,
+.app.sidebar-collapsed .sidebar:hover .density-box,
+.app.sidebar-collapsed .sidebar:hover .sidewalk-legend,
+.app.sidebar-collapsed .sidebar:hover .sidebar-user-info {
+  display: block;
+}
+.app.sidebar-collapsed .sidebar:hover .legend-row span {
+  display: inline;
+}
+.app.sidebar-collapsed .sidebar:hover .brand {
+  justify-content: space-between;
+}
+.app.sidebar-collapsed .sidebar:hover .brand-text {
+  display: block;
+}
+.app.sidebar-collapsed .sidebar:hover .sidebar-collapse-icon-btn {
+  position: static;
+  transform: none;
+}
+.app.sidebar-collapsed .sidebar:hover .nav-item,
+.app.sidebar-collapsed .sidebar:hover .legend-row,
+.app.sidebar-collapsed .sidebar:hover .sidebar-footer {
+  justify-content: flex-start;
+}
+.app.sidebar-collapsed .sidebar:hover .sidebar-user-info {
+  display: flex;
 }
 
 /* ============ MAP FOOTER STRIP ============ */
@@ -1027,6 +1393,7 @@ svg.lucide {
   justify-content: center;
   color: #3a4152;
   cursor: pointer;
+  transition: background 0.15s;
 }
 .map-controls-cluster .ctrl-btn:hover {
   background: #f1f3f6;
@@ -1084,6 +1451,11 @@ svg.lucide {
   justify-content: center;
   cursor: pointer;
   color: #3a4152;
+  transition: background 0.15s, transform 0.15s;
+}
+.feed-scroll-btn:hover {
+  background: #f7f8fa;
+  transform: translateY(-1px);
 }
 .feed-view-toggle {
   display: flex;
@@ -1366,6 +1738,11 @@ svg.lucide {
   font-weight: 700;
   color: #555d6e;
   text-align: center;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.composer-cat:hover {
+  border-color: #c7cbd4;
+  transform: translateY(-1px);
 }
 .composer-cat .ic {
   width: 32px;
@@ -1400,6 +1777,29 @@ svg.lucide {
   background-position: center;
   flex: none;
 }
+.composer-photo-thumb-wrap {
+  position: relative;
+  flex: none;
+}
+.composer-photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1c2230;
+  color: #fff;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.composer-photo-remove:hover {
+  background: var(--red);
+}
 .composer-photo-add {
   width: 76px;
   height: 76px;
@@ -1415,6 +1815,12 @@ svg.lucide {
   color: #9aa2b1;
   cursor: pointer;
   flex: none;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.composer-photo-add:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+  background: var(--green-light);
 }
 .composer-textarea {
   width: 100%;
@@ -1657,15 +2063,143 @@ svg.lucide {
   display: none;
 }
 
-@media (max-width: 720px) {
+.mobile-chat-overlay {
+  display: none;
+}
+
+/* z-index scale (mobile shell): map controls 480-500 < feed-sheet 550 <
+   mobile-bottom-nav 600 < mobile chat overlay 700 < modal backdrop 900 */
+
+/* ============ TABLET (~768-1023px) ============
+   Sidebar collapses to icon rail (reuses the >1100px icon-rail rules),
+   right panel (AI planner) narrows but stays visible side-by-side --
+   this is a distinct in-between layout, not a scaled-down desktop or a
+   scaled-up phone. */
+@media (max-width: 1023px) and (min-width: 601px) {
+  .app {
+    grid-template-columns: 76px 1fr 300px;
+  }
+  .brand-name,
+  .brand-sub,
+  .nav-item span.label,
+  .side-title,
+  .legend-row span,
+  .density-box,
+  .sidewalk-legend,
+  .sidebar-footer span {
+    display: none;
+  }
+  .nav-item {
+    justify-content: center;
+    padding: 13px 10px;
+  }
+  .legend-row {
+    justify-content: center;
+  }
+  .sidebar-collapse-btn span {
+    display: none;
+  }
+  .sidebar-collapse-btn {
+    justify-content: center;
+  }
+
+  /* Top bar: the search card, weather pill, bell and avatar no longer fit
+     on one line in the narrowed tablet map column -- drop the decorative
+     weather pill first (lowest information value) and tighten the rest
+     so everything stays on a single row at a predictable height. */
+  .top-bar {
+    gap: 10px;
+  }
+  .top-bar .search-card {
+    max-width: none;
+    padding: 10px 10px 10px 14px;
+  }
+  .top-bar .search-text .q {
+    font-size: 13px;
+  }
+  .top-bar .plan-btn span {
+    display: none;
+  }
+  .top-bar .search-text .hint {
+    display: none;
+  }
+  .top-bar .top-right {
+    gap: 8px;
+  }
+  .top-bar .pill {
+    display: none;
+  }
+
+  /* Layer control + basemap pill now sit under a single-line top bar --
+     offset clears the search card's actual rendered height (~57px) plus
+     a visible gap, instead of assuming the desktop top-bar's height. */
+  .layer-card,
+  .basemap-pill {
+    top: 88px;
+  }
+  .layer-card {
+    width: 200px;
+  }
+
+  /* Feed panel keeps desktop's fixed-card layout on tablet (bottom-sheet
+     drag behavior is mobile-only) -- its natural height (~330px, one row
+     of photo cards) pushes well above the zoom cluster's desktop offset,
+     so give the cluster more headroom and keep the feed narrower than the
+     cluster's column so they never share a row. */
+  .feed-panel {
+    left: 14px;
+    right: 68px;
+  }
+  .feed-top h3 {
+    font-size: 12px;
+  }
+  .map-controls-cluster {
+    bottom: 360px;
+  }
+  .fcard {
+    width: 168px;
+  }
+
+  .chat-panel-header h2 {
+    font-size: 13.5px;
+  }
+  .pref-preset-btn span,
+  .pref-preset-btn {
+    font-size: 10.8px;
+    padding: 8px 4px;
+  }
+}
+
+/* Tablet-collapsed sidebar (user toggled it manually) keeps the same icon-rail width */
+@media (max-width: 1023px) and (min-width: 601px) {
+  .app.sidebar-collapsed {
+    grid-template-columns: 76px 1fr 300px;
+  }
+  .app.planner-closed {
+    grid-template-columns: 76px 1fr;
+  }
+  .app.sidebar-collapsed.planner-closed {
+    grid-template-columns: 76px 1fr;
+  }
+}
+
+/* ============ MOBILE (<=768px) ============
+   Sidebar and right panel are replaced entirely: bottom tab bar for
+   navigation, a draggable bottom sheet for the feed (never fully hidden),
+   and a full-screen overlay for the AI planner chat. */
+@media (max-width: 600px) {
   .app {
     display: block;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
     position: relative;
+    overflow: hidden;
   }
-  .sidebar,
-  .right-panel {
+  .app.sidebar-collapsed {
+    grid-template-columns: unset;
+  }
+  .sidebar {
     display: none;
   }
   .map-area {
@@ -1678,9 +2212,12 @@ svg.lucide {
   }
   .top-bar .search-card {
     max-width: none;
+    padding: 10px 10px 10px 14px;
   }
   .top-bar .plan-btn {
-    padding: 11px 14px;
+    padding: 12px 14px;
+    min-width: 44px;
+    min-height: 44px;
   }
   .top-bar .plan-btn span {
     display: none;
@@ -1693,23 +2230,108 @@ svg.lucide {
     display: none;
   }
   .top-bar .avatar {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
   }
   .layer-card,
   .basemap-pill {
     display: none;
   }
   .map-controls-cluster {
-    bottom: 190px;
+    bottom: 116px;
     right: 14px;
   }
+  .map-controls-cluster .ctrl-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .scale-tag {
+    display: none;
+  }
+  .map-footer {
+    display: none;
+  }
+  .route-mode-badge {
+    bottom: 128px;
+  }
+
+  /* ---- Feed: draggable bottom sheet, always at least peeking ---- */
   .feed-panel {
-    left: 14px;
-    right: 14px;
-    bottom: 78px;
-    padding: 12px 14px 14px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 550;
+    width: 100%;
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 30px rgba(20, 30, 20, 0.2);
+    padding: 0 16px calc(14px + env(safe-area-inset-bottom));
+    max-height: 78vh;
+    max-height: 78dvh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(calc(100% - 148px - env(safe-area-inset-bottom)));
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    touch-action: none;
   }
+  .feed-panel.expanded {
+    transform: translateY(0);
+  }
+  .feed-sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 14px 0;
+    margin: -4px -16px 0;
+    cursor: grab;
+    flex: none;
+    touch-action: none;
+  }
+  .feed-sheet-handle-bar {
+    width: 40px;
+    height: 4px;
+    border-radius: 3px;
+    background: #d7dbe2;
+  }
+  .feed-panel .feed-top {
+    flex: none;
+  }
+  .feed-panel .feed-top h3 {
+    font-size: 12px;
+  }
+  .feed-planner-trigger span {
+    display: none;
+  }
+  .feed-planner-trigger {
+    padding: 8px;
+  }
+  .feed-see-all {
+    display: none;
+  }
+  .feed-panel .feed-tabs {
+    flex: none;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .feed-panel .feed-cards-wrap,
+  .feed-panel .feed-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .feed-panel .feed-list {
+    max-height: none;
+  }
+  /* Sit above the bottom nav only while peeking; when dragged open it may
+     cover the nav intentionally (same pattern as native bottom sheets). */
+  .feed-panel:not(.expanded) {
+    bottom: 78px;
+  }
+
+  /* ---- Bottom nav: primary mobile navigation ---- */
   .mobile-bottom-nav {
     position: absolute;
     left: 0;
@@ -1720,33 +2342,157 @@ svg.lucide {
     border-top: 1px solid var(--card-border);
     display: flex;
     align-items: center;
-    justify-content: space-around;
-    padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+    justify-content: space-evenly;
+    padding: 8px 24px calc(8px + env(safe-area-inset-bottom));
   }
   .mobile-bottom-nav .mnav-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    font-size: 10px;
+    justify-content: center;
+    gap: 4px;
+    font-size: 10.5px;
     font-weight: 700;
     color: #9aa2b1;
-    flex: 1;
+    flex: none;
+    min-width: 64px;
+    min-height: 48px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .mobile-bottom-nav .mnav-item:active {
+    background: #f1f3f6;
   }
   .mobile-bottom-nav .mnav-item.active {
     color: var(--green-dark);
   }
   .mobile-bottom-nav .mnav-fab {
-    width: 46px;
-    height: 46px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     background: var(--green);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: -26px;
+    margin-top: -28px;
     box-shadow: 0 8px 18px rgba(30, 163, 76, 0.4);
+    flex: none;
+    border: 3px solid #fff;
+  }
+
+  /* ---- AI Trip Planner: full-screen overlay on mobile ---- */
+  .mobile-chat-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 700;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+  }
+  .mobile-chat-overlay .chat-panel {
+    height: 100%;
+  }
+  .mobile-chat-overlay .chat-panel-header {
+    padding: calc(14px + env(safe-area-inset-top)) 10px 14px 18px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .mobile-chat-overlay .chat-panel-header h2 {
+    flex: 1;
+  }
+  .mobile-chat-overlay .chat-panel-header-actions .panel-action-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .mobile-chat-overlay .chat-input-row {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* Route card + chat readability at narrow widths */
+  .chat-msg-bubble {
+    max-width: 88%;
+  }
+  .stat-row {
+    gap: 8px;
+  }
+  .stat-box {
+    padding: 10px 8px;
+  }
+  .stat-box .val {
+    font-size: 13.5px;
+  }
+  .step .lbl {
+    font-size: 12px;
+  }
+  .step .route {
+    font-size: 11px;
+  }
+
+  /* ---- Overlay modals (report composer, thread detail) ---- */
+  .overlay-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .overlay-panel {
+    width: 100%;
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+  }
+  .overlay-panel.wide {
+    width: 100%;
+  }
+  .overlay-head {
+    padding: calc(14px + env(safe-area-inset-top)) 16px 16px;
+  }
+  .overlay-close {
+    width: 44px;
+    height: 44px;
+  }
+  .overlay-body {
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* Report composer: category grid + photo row stay usable at 360px */
+  .composer-cat-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .composer-cat {
+    padding: 12px 4px;
+    min-height: 44px;
+  }
+  .composer-photo-row {
+    flex-wrap: wrap;
+  }
+  .composer-photo-add,
+  .composer-photo-thumb {
+    width: 72px;
+    height: 72px;
+  }
+  .composer-location {
+    flex-wrap: wrap;
+  }
+  .btn-primary,
+  .btn-outline {
+    min-height: 44px;
+  }
+
+  /* Legacy static trip-summary modal is superseded by the full-screen
+     ChatPanel overlay (.mobile-chat-overlay) on mobile -- avoid stacking both. */
+  .trip-planner-modal-backdrop {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .composer-cat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fcard {
+    width: 172px;
   }
 }
 
@@ -1781,6 +2527,13 @@ svg.lucide {
   font-weight: 800;
   color: #1c2230;
   margin: 0;
+  flex: 1;
+}
+.chat-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
 
 .chat-panel-scroll {
