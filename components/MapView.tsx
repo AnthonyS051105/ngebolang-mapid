@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type * as maplibregl from "maplibre-gl";
 import { categoryOf, places } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
-import { fetchHeatmap } from "@/lib/api/routingClient";
+import { fetchHeatmap, fetchPangkalanFeeders, fetchTransportHubs } from "@/lib/api/routingClient";
 import type { LayerDef } from "@/lib/types";
 import type { PoiItem, ThreadItem } from "@/lib/types/routingApi";
 
@@ -55,6 +55,83 @@ function weightForHeatmapCategory(category: unknown) {
 
 const HEATMAP_SOURCE_ID = "kepadatan-heatmap-source";
 const HEATMAP_LAYER_ID = "kepadatan-heatmap-layer";
+
+// Field properties berbeda antara MAPID live ("Name") dan fallback lokal ("NAMA"/"nama") --
+// lihat docs/PYTHON_API_CONTRACT.md Bagian 12b. Popup menampilkan apa adanya, jadi cukup
+// coba beberapa nama field umum untuk judul kartu.
+const NAME_FIELD_CANDIDATES = ["Name", "NAMA", "nama", "name", "layer_name", "title"];
+
+function featureTitle(properties: Record<string, unknown> | null | undefined, fallback: string) {
+  if (!properties) return fallback;
+  for (const key of NAME_FIELD_CANDIDATES) {
+    const value = properties[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return fallback;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+interface PopupField {
+  label: string;
+  format?: (value: unknown) => string;
+}
+
+// Field skor TOD granular (Comm_400, Access_sco, Hub_id, dst dari
+// graphapp/mapid_sync.py "transport_hubs") SENGAJA tidak dimasukkan di sini --
+// angka riset mentah tanpa acuan pembanding, tidak actionable bagi wisatawan.
+// Hanya field yang punya arti langsung bagi pengguna yang ditampilkan.
+const HALTE_POPUP_FIELDS: Record<string, PopupField> = {
+  Type: { label: "Tipe" },
+  TOD_Class: {
+    label: "Tingkat Keramaian Kawasan",
+    format: (v) => {
+      const map: Record<string, string> = { Low: "Rendah", Medium: "Sedang", High: "Tinggi" };
+      const s = String(v);
+      return map[s] ?? s;
+    },
+  },
+};
+
+const BECAK_POPUP_FIELDS: Record<string, PopupField> = {
+  MODA: { label: "Moda" },
+  HALTE_TERDEKAT: { label: "Halte Terdekat" },
+  JARAK_KE_HALTE_M: { label: "Jarak ke Halte", format: (v) => `${Math.round(Number(v))} m` },
+  WAKTU_JALAN_SEC: {
+    label: "Estimasi Jalan Kaki",
+    format: (v) => {
+      const sec = Number(v);
+      return sec >= 60 ? `${Math.round(sec / 60)} menit` : `${Math.round(sec)} detik`;
+    },
+  },
+  AKSESIBILITAS: { label: "Aksesibilitas", format: (v) => (v === "-" ? "Tidak ada catatan" : String(v)) },
+  NARASI: { label: "Catatan", format: (v) => (v === "-" ? "Tidak ada catatan" : String(v)) },
+};
+
+function fieldsPopupHtml(
+  properties: Record<string, unknown> | null | undefined,
+  title: string,
+  fieldDefs: Record<string, PopupField>
+) {
+  const rows = Object.entries(fieldDefs)
+    .map(([key, def]) => {
+      const raw = properties?.[key];
+      if (raw === null || raw === undefined || raw === "") return null;
+      const value = def.format ? def.format(raw) : String(raw);
+      return `<div class="feature-popup-row"><span class="feature-popup-key">${escapeHtml(
+        def.label
+      )}</span><span class="feature-popup-value">${escapeHtml(value)}</span></div>`;
+    })
+    .filter(Boolean)
+    .join("");
+  return `<div class="feature-popup"><b>${escapeHtml(title)}</b>${rows}</div>`;
+}
 
 export interface RouteDisplayOptions {
   walkOnly?: boolean;
@@ -119,12 +196,16 @@ export default function MapView({
   const poiMarkersRef = useRef<maplibregl.Marker[]>([]);
   const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
   const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const halteMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const becakMarkersRef = useRef<maplibregl.Marker[]>([]);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const layerVisibilityRef = useRef<Record<string, boolean>>({});
   const onPoiClickRef = useRef(onPoiClick);
   const onThreadClickRef = useRef(onThreadClick);
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [halteFeatures, setHalteFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [becakFeatures, setBecakFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
 
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
@@ -262,10 +343,35 @@ export default function MapView({
             console.error("Gagal memuat heatmap dari backend:", err);
           });
 
+        fetchTransportHubs()
+          .then((fc) => {
+            if (cancelled) return;
+            setHalteFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat layer halte & transportasi dari backend:", err);
+          });
+
+        fetchPangkalanFeeders()
+          .then((fc) => {
+            if (cancelled) return;
+            setBecakFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat layer pangkalan becak/andong dari backend:", err);
+          });
+
         layerDefs.forEach((d) => {
           layerVisibilityRef.current[d.key] = d.on;
         });
 
+        if (map.getLayer(HEATMAP_LAYER_ID)) {
+          map.setLayoutProperty(
+            HEATMAP_LAYER_ID,
+            "visibility",
+            layerVisibilityRef.current.heatmap === false ? "none" : "visible"
+          );
+        }
         setMapReady(true);
 
         onReady?.({
@@ -283,6 +389,14 @@ export default function MapView({
               });
             } else if (key === "reports") {
               reportMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            } else if (key === "halte") {
+              halteMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            } else if (key === "becak") {
+              becakMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
               });
             }
@@ -370,6 +484,10 @@ export default function MapView({
       poiMarkersRef.current = [];
       reportMarkersRef.current.forEach((m) => m.remove());
       reportMarkersRef.current = [];
+      halteMarkersRef.current.forEach((m) => m.remove());
+      halteMarkersRef.current = [];
+      becakMarkersRef.current.forEach((m) => m.remove());
+      becakMarkersRef.current = [];
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       glMapRef.current?.remove();
@@ -439,6 +557,66 @@ export default function MapView({
       reportMarkersRef.current.push(marker);
     });
   }, [threadItems, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    halteMarkersRef.current.forEach((m) => m.remove());
+    halteMarkersRef.current = [];
+
+    halteFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Halte & Transportasi");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "34px";
+      el.style.height = "34px";
+      el.style.background = "#0ea5e9";
+      el.innerHTML = `<span>${iconMarkup("bus", { width: 16, height: 16, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.halte === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, HALTE_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      halteMarkersRef.current.push(marker);
+    });
+  }, [halteFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    becakMarkersRef.current.forEach((m) => m.remove());
+    becakMarkersRef.current = [];
+
+    becakFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Pangkalan Becak/Andong");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "34px";
+      el.style.height = "34px";
+      el.style.background = "#9b5cf5";
+      el.innerHTML = `<span>${iconMarkup("bike", { width: 16, height: 16, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.becak === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, BECAK_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      becakMarkersRef.current.push(marker);
+    });
+  }, [becakFeatures, mapReady]);
 
   return (
     <>

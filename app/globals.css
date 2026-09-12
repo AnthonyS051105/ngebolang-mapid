@@ -1600,6 +1600,32 @@ svg.lucide {
   margin: 0;
 }
 
+.feature-popup {
+  font-size: 12px;
+  max-width: 220px;
+}
+.feature-popup b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.feature-popup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-top: 1px solid #eef0f4;
+}
+.feature-popup-key {
+  color: #8a90a0;
+  white-space: nowrap;
+}
+.feature-popup-value {
+  color: #1c2230;
+  text-align: right;
+  word-break: break-word;
+}
+
 /* Sidewalk condition legend addition */
 .sidewalk-legend {
   display: flex;

@@ -60,6 +60,15 @@ export const fetchHeatmap = (timeSlot?: string) =>
     `/api/layers/heatmap${timeSlot ? `?time_slot=${timeSlot}` : ""}`
   );
 
+// Layer MAPID GeoServer -- di luar cakupan PRD tapi tersedia di backend, lihat
+// docs/PYTHON_API_CONTRACT.md Bagian 12b. Respons bisa berisi source "fallback"
+// kalau MAPID API gagal/kosong -- struktur GeoJSON tetap sama.
+export const fetchTransportHubs = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/transport-hubs");
+
+export const fetchPangkalanFeeders = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/pangkalan-feeders");
+
 export const getExportReportsUrl = (format: "geojson" | "csv" = "geojson", category?: string) => {
   const params = new URLSearchParams({ format });
   if (category) params.set("category", category);
