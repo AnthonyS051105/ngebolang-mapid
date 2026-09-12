@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import {
   Bell,
   ChevronDown,
+  Download,
   Layers,
   LocateFixed,
   Map as MapIcon,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
 import type { LayerDef } from "@/lib/types";
-import { fetchPoi, fetchThreads } from "@/lib/api/routingClient";
+import { fetchPoi, fetchThreads, getExportReportsUrl } from "@/lib/api/routingClient";
 import type { PoiItem, RouteResponse, ThreadItem } from "@/lib/types/routingApi";
 import type { MapViewHandle, RouteDisplayOptions } from "./MapView";
 import FeedPanel from "./FeedPanel";
@@ -86,7 +87,7 @@ function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<M
   return (
     <main className="map-area">
       <MapView
-        layerDefs={initialLayerDefs}
+        layerDefs={layerDefs}
         poiItems={poiItems}
         threadItems={threadItems}
         onReady={(handle) => {
@@ -145,6 +146,15 @@ function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<M
             </div>
           ))}
         </div>
+        <a
+          className="layer-export-link"
+          href={getExportReportsUrl("geojson")}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "flex", alignItems: "center", gap: 6 }}
+        >
+          <Download width={14} height={14} /> Unduh Laporan (GeoJSON)
+        </a>
       </div>
 
       <div className="basemap-pill">

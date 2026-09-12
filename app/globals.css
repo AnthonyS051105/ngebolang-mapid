@@ -393,6 +393,17 @@ svg.lucide {
   font-weight: 600;
   color: #3a4152;
 }
+.layer-export-link {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--green);
+  text-decoration: none;
+  padding: 7px 2px;
+  border-top: 1px solid #edeff3;
+}
+.layer-export-link:hover {
+  text-decoration: underline;
+}
 .switch {
   width: 34px;
   height: 19px;

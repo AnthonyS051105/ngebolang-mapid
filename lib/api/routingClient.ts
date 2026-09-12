@@ -60,6 +60,12 @@ export const fetchHeatmap = (timeSlot?: string) =>
     `/api/layers/heatmap${timeSlot ? `?time_slot=${timeSlot}` : ""}`
   );
 
+export const getExportReportsUrl = (format: "geojson" | "csv" = "geojson", category?: string) => {
+  const params = new URLSearchParams({ format });
+  if (category) params.set("category", category);
+  return `${BASE_URL}/api/export/reports?${params.toString()}`;
+};
+
 export const checkHealth = async (): Promise<boolean> => {
   try {
     const res = await fetch(`${BASE_URL}/health`, { signal: AbortSignal.timeout(3000) });

@@ -2,10 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import type L from "leaflet";
-import { categoryOf, heatSpots, places } from "@/lib/data";
+import { categoryOf, places } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
+import { fetchHeatmap } from "@/lib/api/routingClient";
 import type { LayerDef } from "@/lib/types";
 import type { PoiItem, ThreadItem } from "@/lib/types/routingApi";
+
+// Nilai category dari GET /api/layers/heatmap huruf kapital di awal
+// ("Rendah"/"Sedang"/"Tinggi") -- lihat docs/PYTHON_API_CONTRACT.md Bagian 12.
+const HEATMAP_CATEGORY_COLOR: Record<string, string> = {
+  Rendah: "#22c55e",
+  Sedang: "#f97316",
+  Tinggi: "#ef4444",
+};
+
+function colorForHeatmapCategory(category: unknown) {
+  if (typeof category === "string" && HEATMAP_CATEGORY_COLOR[category]) {
+    return HEATMAP_CATEGORY_COLOR[category];
+  }
+  return "#6b7280";
+}
 
 export interface RouteDisplayOptions {
   walkOnly?: boolean;
@@ -66,6 +82,7 @@ export default function MapView({
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
   const reportLayerRef = useRef<L.LayerGroup | null>(null);
   const routeApiLayerRef = useRef<L.LayerGroup | null>(null);
+  const heatLayerRef = useRef<L.LayerGroup | null>(null);
   const onPoiClickRef = useRef(onPoiClick);
   const onThreadClickRef = useRef(onThreadClick);
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
@@ -104,17 +121,30 @@ export default function MapView({
       heatPane.style.opacity = "0.55";
       heatPane.style.zIndex = "350";
       const heatLayer = L.layerGroup();
-      heatSpots.forEach((h) => {
-        L.circle([h.lat, h.lng], {
-          radius: h.r,
-          pane: "heatPane",
-          color: h.c,
-          fillColor: h.c,
-          fillOpacity: 0.9,
-          stroke: false,
-        }).addTo(heatLayer);
-      });
       heatLayer.addTo(map);
+      heatLayerRef.current = heatLayer;
+
+      fetchHeatmap()
+        .then((fc) => {
+          if (cancelled) return;
+          (fc.features ?? []).forEach((feature) => {
+            const geometry = feature.geometry;
+            if (!geometry || geometry.type !== "Point") return;
+            const [lng, lat] = geometry.coordinates as [number, number];
+            const color = colorForHeatmapCategory(feature.properties?.category);
+            L.circle([lat, lng], {
+              radius: 180,
+              pane: "heatPane",
+              color,
+              fillColor: color,
+              fillOpacity: 0.9,
+              stroke: false,
+            }).addTo(heatLayer);
+          });
+        })
+        .catch((err) => {
+          console.error("Gagal memuat heatmap dari backend:", err);
+        });
 
       const placeLayer = L.layerGroup();
       places.forEach((p) => {
@@ -161,10 +191,24 @@ export default function MapView({
       routeApiLayer.addTo(map);
       routeApiLayerRef.current = routeApiLayer;
 
+      // Belum ada endpoint/data untuk trotoar, halte, dan pangkalan becak/andong
+      // (di luar cakupan permintaan saat ini) -- tetap dibuat sebagai LayerGroup
+      // asli supaya toggle di LayerControl benar-benar menambah/menghapus layer
+      // dari peta, bukan cuma mengubah state UI tanpa efek.
+      const trotoarLayer = L.layerGroup();
+      trotoarLayer.addTo(map);
+      const halteLayer = L.layerGroup();
+      halteLayer.addTo(map);
+      const becakLayer = L.layerGroup();
+      becakLayer.addTo(map);
+
       const layerMap: Record<string, L.LayerGroup> = {
         heatmap: heatLayer,
         reports: reportLayer,
         poi: poiLayer,
+        trotoar: trotoarLayer,
+        halte: halteLayer,
+        becak: becakLayer,
       };
       layerDefs.forEach((d) => {
         const layer = layerMap[d.key];
