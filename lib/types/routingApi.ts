@@ -1,8 +1,18 @@
 // Tipe sesuai respons Python asli (WebGIS-Backend). Field SENGAJA tidak diterjemahkan
 // ke Bahasa Indonesia / camelCase konvensi lokal -- lihat docs/SDD.md Bagian 3.
 
-export type Preference = "balanced" | "fastest" | "cheapest" | "walk_only" | "accessible";
+// 3 preset (PRD 7.3), masing-masing dengan alias ID/EN -- lihat graphapp/router.py PRESET_BOBOT.
+// "walk_only" dan "accessible" BUKAN preset preference lagi -- sudah jadi field boolean
+// terpisah (walk_only, ramah_aksesibilitas) di RouteRequestBody, meski backend masih
+// menerima kedua string itu sebagai alias lawas di preference untuk kompatibilitas.
+export type Preference = "hemat" | "cheapest" | "cepat" | "fastest" | "seimbang" | "balanced";
 export type FeederType = "any" | "andong" | "becak";
+
+export interface WaypointItem {
+  lat: number;
+  lon: number;
+  name?: string;
+}
 
 export interface RouteRequestBody {
   orig_lat?: number;
@@ -14,10 +24,12 @@ export interface RouteRequestBody {
   orig_name?: string;
   dest_name?: string;
   preference?: Preference;
+  walk_only?: boolean;
+  ramah_aksesibilitas?: boolean;
   budget_max?: number;
   feeder_type?: FeederType;
   is_weekend?: boolean;
-  waypoints?: unknown[];
+  waypoints?: WaypointItem[];
 }
 
 export interface RouteStep {
