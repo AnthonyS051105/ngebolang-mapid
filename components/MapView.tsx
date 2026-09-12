@@ -1,27 +1,60 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type L from "leaflet";
+import type * as maplibregl from "maplibre-gl";
 import { categoryOf, places } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
 import { fetchHeatmap } from "@/lib/api/routingClient";
 import type { LayerDef } from "@/lib/types";
 import type { PoiItem, ThreadItem } from "@/lib/types/routingApi";
 
+declare global {
+  interface Window {
+    maplibregl?: typeof maplibregl;
+  }
+}
+
+const MAPID_STYLE_URL = `https://basemap.mapid.io/styles/street-2d-building/style.json?key=${process.env.NEXT_PUBLIC_MAPID_API_KEY}`;
+
+// MapLibre GL JS di-load lewat <script> CDN di app/layout.tsx, BUKAN lewat
+// `import "maplibre-gl"` -- import npm membuat MapLibre menghitung URL Web
+// Worker-nya sendiri lewat import.meta.url, yang dibungkus Turbopack/webpack
+// menjadi URL non-http sehingga worker gagal dimuat secara diam-diam (map
+// tidak pernah selesai "load", tanpa error apa pun). Lewat CDN, browser
+// menjalankan file itu apa adanya sehingga import.meta.url tetap valid.
+function waitForMaplibreGl(): Promise<typeof maplibregl> {
+  return new Promise((resolve) => {
+    if (window.maplibregl) {
+      resolve(window.maplibregl);
+      return;
+    }
+    const interval = setInterval(() => {
+      if (window.maplibregl) {
+        clearInterval(interval);
+        resolve(window.maplibregl);
+      }
+    }, 50);
+  });
+}
+
 // Nilai category dari GET /api/layers/heatmap huruf kapital di awal
 // ("Rendah"/"Sedang"/"Tinggi") -- lihat docs/PYTHON_API_CONTRACT.md Bagian 12.
-const HEATMAP_CATEGORY_COLOR: Record<string, string> = {
-  Rendah: "#22c55e",
-  Sedang: "#f97316",
-  Tinggi: "#ef4444",
+// Dipetakan ke bobot numerik untuk native heatmap layer MapLibre.
+const HEATMAP_CATEGORY_WEIGHT: Record<string, number> = {
+  Rendah: 0.3,
+  Sedang: 0.6,
+  Tinggi: 1,
 };
 
-function colorForHeatmapCategory(category: unknown) {
-  if (typeof category === "string" && HEATMAP_CATEGORY_COLOR[category]) {
-    return HEATMAP_CATEGORY_COLOR[category];
+function weightForHeatmapCategory(category: unknown) {
+  if (typeof category === "string" && HEATMAP_CATEGORY_WEIGHT[category] !== undefined) {
+    return HEATMAP_CATEGORY_WEIGHT[category];
   }
-  return "#6b7280";
+  return 0.4;
 }
+
+const HEATMAP_SOURCE_ID = "kepadatan-heatmap-source";
+const HEATMAP_LAYER_ID = "kepadatan-heatmap-layer";
 
 export interface RouteDisplayOptions {
   walkOnly?: boolean;
@@ -68,6 +101,10 @@ function iconForPoiCategory(category: string) {
   return POI_CATEGORY_ICON[category.toLowerCase()] ?? "map-pin";
 }
 
+const ROUTE_SOURCE_ID = "route-api-source";
+const ROUTE_LINE_LAYER_ID = "route-api-line";
+const ROUTE_POINT_LAYER_ID = "route-api-point";
+
 export default function MapView({
   layerDefs,
   poiItems,
@@ -77,15 +114,17 @@ export default function MapView({
   onThreadClick,
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const leafletModuleRef = useRef<typeof L | null>(null);
-  const poiLayerRef = useRef<L.LayerGroup | null>(null);
-  const reportLayerRef = useRef<L.LayerGroup | null>(null);
-  const routeApiLayerRef = useRef<L.LayerGroup | null>(null);
-  const heatLayerRef = useRef<L.LayerGroup | null>(null);
+  const glMapRef = useRef<maplibregl.Map | null>(null);
+  const glModuleRef = useRef<typeof maplibregl | null>(null);
+  const poiMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const layerVisibilityRef = useRef<Record<string, boolean>>({});
   const onPoiClickRef = useRef(onPoiClick);
   const onThreadClickRef = useRef(onThreadClick);
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
@@ -99,247 +138,307 @@ export default function MapView({
     let cancelled = false;
 
     (async () => {
-      const leaflet = await import("leaflet");
-      const L = leaflet.default;
+      const maplibregl = await waitForMaplibreGl();
       if (cancelled || !mapRef.current) return;
-      leafletModuleRef.current = L;
+      glModuleRef.current = maplibregl;
 
-      const map = L.map(mapRef.current, {
-        zoomControl: false,
+      const map = new maplibregl.Map({
+        container: mapRef.current,
+        style: MAPID_STYLE_URL,
+        center: [110.365, -7.793],
+        zoom: 15,
         attributionControl: false,
-      }).setView([-7.793, 110.365], 15);
-      leafletMapRef.current = map;
+      });
+      glMapRef.current = map;
 
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        { subdomains: "abcd", maxZoom: 19 }
-      ).addTo(map);
+      map.on("error", (e) => {
+        console.error("Gagal memuat basemap MAPID:", e?.error ?? e);
+      });
 
-      map.createPane("heatPane");
-      const heatPane = map.getPane("heatPane")!;
-      heatPane.style.filter = "blur(18px)";
-      heatPane.style.opacity = "0.55";
-      heatPane.style.zIndex = "350";
-      const heatLayer = L.layerGroup();
-      heatLayer.addTo(map);
-      heatLayerRef.current = heatLayer;
+      requestAnimationFrame(() => map.resize());
+      const resizeObserver = new ResizeObserver(() => map.resize());
+      resizeObserver.observe(mapRef.current);
+      resizeObserverRef.current = resizeObserver;
 
-      fetchHeatmap()
-        .then((fc) => {
-          if (cancelled) return;
-          (fc.features ?? []).forEach((feature) => {
-            const geometry = feature.geometry;
-            if (!geometry || geometry.type !== "Point") return;
-            const [lng, lat] = geometry.coordinates as [number, number];
-            const color = colorForHeatmapCategory(feature.properties?.category);
-            L.circle([lat, lng], {
-              radius: 180,
-              pane: "heatPane",
-              color,
-              fillColor: color,
-              fillOpacity: 0.9,
-              stroke: false,
-            }).addTo(heatLayer);
-          });
-        })
-        .catch((err) => {
-          console.error("Gagal memuat heatmap dari backend:", err);
+      map.on("load", () => {
+        if (cancelled) return;
+
+        map.addSource(ROUTE_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: ROUTE_LINE_LAYER_ID,
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ["coalesce", ["get", "color"], "#2f7cf6"],
+            "line-width": ["coalesce", ["get", "weight"], 5],
+            "line-opacity": ["coalesce", ["get", "opacity"], 0.9],
+          },
+        });
+        map.addLayer({
+          id: ROUTE_POINT_LAYER_ID,
+          type: "circle",
+          source: ROUTE_SOURCE_ID,
+          filter: ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-radius": 6,
+            "circle-color": "#fff",
+            "circle-stroke-width": 3,
+            "circle-stroke-color": ["coalesce", ["get", "color"], "#2f7cf6"],
+          },
         });
 
-      const placeLayer = L.layerGroup();
-      places.forEach((p) => {
-        if (p.isText) {
-          L.marker([p.lat, p.lng], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div class="place-label">${p.name}</div>`,
-              iconSize: undefined,
-            }),
-          }).addTo(placeLayer);
-          L.circleMarker([p.lat, p.lng], {
-            radius: 6,
-            color: "#2f7cf6",
-            weight: 3,
-            fillColor: "#fff",
-            fillOpacity: 1,
-          }).addTo(placeLayer);
-        } else {
-          L.marker([p.lat, p.lng], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div style="text-align:center;transform:translateY(-4px);">${iconMarkup(
-                p.icon,
-                { width: 26, height: 26, color: "#1c2230" }
-              )}</div><div class="place-label" style="margin-top:-2px;">${p.name}</div>`,
-              iconSize: undefined,
-              iconAnchor: [0, 30],
-            }),
-          }).addTo(placeLayer);
-        }
-      });
-      placeLayer.addTo(map);
+        // Titik nama tempat statis (Tugu, Titik Nol, Malioboro, Kraton).
+        places.forEach((p) => {
+          const el = document.createElement("div");
+          if (p.isText) {
+            el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;">
+              <div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid #2f7cf6;"></div>
+              <div class="place-label">${p.name}</div>
+            </div>`;
+          } else {
+            el.innerHTML = `<div style="text-align:center;">${iconMarkup(p.icon, {
+              width: 26,
+              height: 26,
+              color: "#1c2230",
+            })}</div><div class="place-label" style="margin-top:-2px;">${p.name}</div>`;
+          }
+          const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+            .setLngLat([p.lng, p.lat])
+            .addTo(map);
+          placeMarkersRef.current.push(marker);
+        });
 
-      const reportLayer = L.layerGroup();
-      reportLayer.addTo(map);
-      reportLayerRef.current = reportLayer;
+        map.addSource(HEATMAP_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: HEATMAP_LAYER_ID,
+          type: "heatmap",
+          source: HEATMAP_SOURCE_ID,
+          paint: {
+            "heatmap-weight": ["coalesce", ["get", "weight"], 0.4],
+            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 12, 1, 17, 2.2],
+            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 12, 30, 17, 90],
+            "heatmap-opacity": 0.7,
+            "heatmap-color": [
+              "interpolate",
+              ["linear"],
+              ["heatmap-density"],
+              0, "rgba(34,197,94,0)",
+              0.2, "rgba(34,197,94,0.5)",
+              0.5, "rgba(249,115,22,0.65)",
+              0.8, "rgba(239,68,68,0.75)",
+              1, "rgba(185,28,28,0.85)",
+            ],
+          },
+        });
 
-      const poiLayer = L.layerGroup();
-      poiLayer.addTo(map);
-      poiLayerRef.current = poiLayer;
-
-      const routeApiLayer = L.layerGroup();
-      routeApiLayer.addTo(map);
-      routeApiLayerRef.current = routeApiLayer;
-
-      // Belum ada endpoint/data untuk trotoar, halte, dan pangkalan becak/andong
-      // (di luar cakupan permintaan saat ini) -- tetap dibuat sebagai LayerGroup
-      // asli supaya toggle di LayerControl benar-benar menambah/menghapus layer
-      // dari peta, bukan cuma mengubah state UI tanpa efek.
-      const trotoarLayer = L.layerGroup();
-      trotoarLayer.addTo(map);
-      const halteLayer = L.layerGroup();
-      halteLayer.addTo(map);
-      const becakLayer = L.layerGroup();
-      becakLayer.addTo(map);
-
-      const layerMap: Record<string, L.LayerGroup> = {
-        heatmap: heatLayer,
-        reports: reportLayer,
-        poi: poiLayer,
-        trotoar: trotoarLayer,
-        halte: halteLayer,
-        becak: becakLayer,
-      };
-      layerDefs.forEach((d) => {
-        const layer = layerMap[d.key];
-        if (layer && !d.on) map.removeLayer(layer);
-      });
-
-      onReady?.({
-        zoomIn: () => map.zoomIn(),
-        zoomOut: () => map.zoomOut(),
-        setLayerVisible: (key, visible) => {
-          const layer = layerMap[key];
-          if (!layer) return;
-          if (visible) layer.addTo(map);
-          else map.removeLayer(layer);
-        },
-        locate: () => {
-          map.setView([-7.793, 110.365], 15);
-        },
-        showRoute: (routeGeojson, options) => {
-          const layer = routeApiLayerRef.current;
-          if (!layer) return;
-          layer.clearLayers();
-
-          const walkOnly = options?.walkOnly ?? false;
-          const ramahAksesibilitas = options?.ramahAksesibilitas ?? false;
-          setActiveRouteMode(walkOnly ? "walk_only" : ramahAksesibilitas ? "accessible" : null);
-
-          const geoJsonLayer = L.geoJSON(routeGeojson, {
-            style: (feature) => {
-              const style = feature?.properties?.style as
-                | { color?: string; weight?: number; opacity?: number; dashArray?: string | null }
-                | undefined;
-              // Indikator preferensi aktif menimpa gaya per-mode dari backend:
-              // walk_only -> garis putus-putus (dashArray), ramah_aksesibilitas -> kuning + lebih tebal.
-              if (ramahAksesibilitas) {
-                return {
-                  color: "#eab308",
-                  weight: (style?.weight ?? 5) + 1,
-                  opacity: style?.opacity ?? 0.9,
-                  dashArray: undefined,
-                  lineCap: "round",
-                };
-              }
-              return {
-                color: style?.color ?? "#2f7cf6",
-                weight: style?.weight ?? 5,
-                opacity: style?.opacity ?? 0.9,
-                dashArray: walkOnly ? "6, 8" : style?.dashArray ?? undefined,
-                lineCap: "round",
-              };
-            },
-            pointToLayer: (feature, latlng) =>
-              L.circleMarker(latlng, {
-                radius: 6,
-                color: ramahAksesibilitas
-                  ? "#eab308"
-                  : (feature?.properties?.color as string) ?? "#2f7cf6",
-                weight: 3,
-                fillColor: "#fff",
-                fillOpacity: 1,
-              }),
+        fetchHeatmap()
+          .then((fc) => {
+            if (cancelled) return;
+            const source = map.getSource(HEATMAP_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+            if (!source) return;
+            const weighted: GeoJSON.FeatureCollection = {
+              type: "FeatureCollection",
+              features: (fc.features ?? [])
+                .filter((f) => f.geometry?.type === "Point")
+                .map((f) => ({
+                  ...f,
+                  properties: {
+                    ...f.properties,
+                    weight: weightForHeatmapCategory(f.properties?.category),
+                  },
+                })),
+            };
+            source.setData(weighted);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat heatmap dari backend:", err);
           });
-          geoJsonLayer.addTo(layer);
 
-          const bounds = geoJsonLayer.getBounds();
-          if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60] });
-        },
-        clearRoute: () => {
-          routeApiLayerRef.current?.clearLayers();
-          setActiveRouteMode(null);
-        },
+        layerDefs.forEach((d) => {
+          layerVisibilityRef.current[d.key] = d.on;
+        });
+
+        setMapReady(true);
+
+        onReady?.({
+          zoomIn: () => map.zoomIn(),
+          zoomOut: () => map.zoomOut(),
+          setLayerVisible: (key, visible) => {
+            layerVisibilityRef.current[key] = visible;
+            if (key === "heatmap") {
+              if (map.getLayer(HEATMAP_LAYER_ID)) {
+                map.setLayoutProperty(HEATMAP_LAYER_ID, "visibility", visible ? "visible" : "none");
+              }
+            } else if (key === "poi") {
+              poiMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            } else if (key === "reports") {
+              reportMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            }
+          },
+          locate: () => {
+            map.flyTo({ center: [110.365, -7.793], zoom: 15 });
+          },
+          showRoute: (routeGeojson, options) => {
+            const source = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+            if (!source) return;
+
+            const walkOnly = options?.walkOnly ?? false;
+            const ramahAksesibilitas = options?.ramahAksesibilitas ?? false;
+            setActiveRouteMode(walkOnly ? "walk_only" : ramahAksesibilitas ? "accessible" : null);
+
+            source.setData(routeGeojson);
+
+            if (ramahAksesibilitas) {
+              map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", "#eab308");
+              map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-width", [
+                "+",
+                ["coalesce", ["get", "weight"], 5],
+                1,
+              ]);
+              map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-dasharray", undefined);
+              map.setPaintProperty(ROUTE_POINT_LAYER_ID, "circle-stroke-color", "#eab308");
+            } else {
+              map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", [
+                "coalesce",
+                ["get", "color"],
+                "#2f7cf6",
+              ]);
+              map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-width", [
+                "coalesce",
+                ["get", "weight"],
+                5,
+              ]);
+              map.setPaintProperty(
+                ROUTE_LINE_LAYER_ID,
+                "line-dasharray",
+                walkOnly ? [2, 2] : undefined
+              );
+              map.setPaintProperty(
+                ROUTE_POINT_LAYER_ID,
+                "circle-stroke-color",
+                ["coalesce", ["get", "color"], "#2f7cf6"]
+              );
+            }
+
+            const bounds = new maplibregl.LngLatBounds();
+            let hasCoords = false;
+            const extend = (coords: unknown): void => {
+              if (
+                Array.isArray(coords) &&
+                coords.length >= 2 &&
+                typeof coords[0] === "number" &&
+                typeof coords[1] === "number"
+              ) {
+                bounds.extend(coords as [number, number]);
+                hasCoords = true;
+              } else if (Array.isArray(coords)) {
+                coords.forEach(extend);
+              }
+            };
+            (routeGeojson.features ?? []).forEach((f) => {
+              const geometry = f.geometry as { coordinates?: unknown } | undefined;
+              extend(geometry?.coordinates);
+            });
+            if (hasCoords) map.fitBounds(bounds, { padding: 60 });
+          },
+          clearRoute: () => {
+            const source = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+            source?.setData({ type: "FeatureCollection", features: [] });
+            setActiveRouteMode(null);
+          },
+        });
       });
     })();
 
     return () => {
       cancelled = true;
-      leafletMapRef.current?.remove();
-      leafletMapRef.current = null;
+      placeMarkersRef.current.forEach((m) => m.remove());
+      placeMarkersRef.current = [];
+      poiMarkersRef.current.forEach((m) => m.remove());
+      poiMarkersRef.current = [];
+      reportMarkersRef.current.forEach((m) => m.remove());
+      reportMarkersRef.current = [];
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      glMapRef.current?.remove();
+      glMapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const L = leafletModuleRef.current;
-    const map = leafletMapRef.current;
-    const poiLayer = poiLayerRef.current;
-    if (!L || !map || !poiLayer) return;
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
 
-    poiLayer.clearLayers();
+    poiMarkersRef.current.forEach((m) => m.remove());
+    poiMarkersRef.current = [];
+
     poiItems.forEach((p) => {
-      const icon = L.divIcon({
-        className: "",
-        iconAnchor: [17, 34],
-        iconSize: [34, 34],
-        html: `<div class="pin" style="width:34px;height:34px;background:#ffffff;border-color:#d7dbe2"><span>${iconMarkup(
-          iconForPoiCategory(p.category),
-          { width: 16, height: 16, color: "#4b5563" }
-        )}</span></div>`,
-      });
-      const marker = L.marker([p.lat, p.lon], { icon }).addTo(poiLayer);
-      marker.on("click", (e) => {
-        const point = map.latLngToContainerPoint(e.latlng);
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "34px";
+      el.style.height = "34px";
+      el.style.background = "#ffffff";
+      el.style.borderColor = "#d7dbe2";
+      el.innerHTML = `<span>${iconMarkup(iconForPoiCategory(p.category), {
+        width: 16,
+        height: 16,
+        color: "#4b5563",
+      })}</span>`;
+      if (layerVisibilityRef.current.poi === false) el.style.display = "none";
+      el.addEventListener("click", () => {
+        const point = map.project([p.lon, p.lat]);
         onPoiClickRef.current?.(p, point.x, point.y - 20);
       });
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([p.lon, p.lat])
+        .addTo(map);
+      poiMarkersRef.current.push(marker);
     });
-  }, [poiItems]);
+  }, [poiItems, mapReady]);
 
   useEffect(() => {
-    const L = leafletModuleRef.current;
-    const map = leafletMapRef.current;
-    const reportLayer = reportLayerRef.current;
-    if (!L || !map || !reportLayer) return;
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
 
-    reportLayer.clearLayers();
+    reportMarkersRef.current.forEach((m) => m.remove());
+    reportMarkersRef.current = [];
+
     threadItems.forEach((t) => {
       const c = categoryOf(t.category);
-      const icon = L.divIcon({
-        className: "",
-        iconAnchor: [17, 34],
-        iconSize: [34, 34],
-        html: `<div class="pin" style="width:34px;height:34px;background:${c.color}"><span>${iconMarkup(
-          c.icon,
-          { width: 16, height: 16, color: "#fff" }
-        )}</span></div>`,
-      });
-      const marker = L.marker([t.lat, t.lon], { icon })
-        .bindPopup(`<b>${t.description}</b><br><small>${t.reporter_name || "Warga"}</small>`)
-        .addTo(reportLayer);
-      marker.on("click", () => onThreadClickRef.current?.(t));
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "34px";
+      el.style.height = "34px";
+      el.style.background = c.color;
+      el.innerHTML = `<span>${iconMarkup(c.icon, { width: 16, height: 16, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.reports === false) el.style.display = "none";
+      el.addEventListener("click", () => onThreadClickRef.current?.(t));
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        `<b>${t.description}</b><br><small>${t.reporter_name || "Warga"}</small>`
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([t.lon, t.lat])
+        .setPopup(popup)
+        .addTo(map);
+      reportMarkersRef.current.push(marker);
     });
-  }, [threadItems]);
+  }, [threadItems, mapReady]);
 
   return (
     <>

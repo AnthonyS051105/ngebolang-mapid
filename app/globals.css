@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "leaflet/dist/leaflet.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 :root {
   --sidebar-bg: #12151c;
@@ -243,7 +243,14 @@ svg.lucide {
   position: absolute;
   inset: 0;
   z-index: 1;
-  filter: saturate(0.85) brightness(1.03);
+}
+#map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: saturate(0.85) brightness(1.03);
 }
 
 .top-bar {
