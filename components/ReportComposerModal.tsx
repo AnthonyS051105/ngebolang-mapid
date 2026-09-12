@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Camera, MapPin, SquarePen, X } from "lucide-react";
 import { CAT } from "@/lib/data";
 import { getIcon } from "@/lib/icons";
+import { ProxyApiError, submitThread, type SubmitThreadResult } from "@/lib/api/threadsClient";
 import type { CategoryKey } from "@/lib/types";
 
 interface ReportComposerModalProps {
@@ -13,12 +14,71 @@ interface ReportComposerModalProps {
 
 const catKeys = Object.keys(CAT) as CategoryKey[];
 
+// Pusat koridor MVP (Kraton-Titik Nol-Malioboro-Tugu), dipakai sebagai lokasi
+// laporan sampai geolokasi pengguna sungguhan tersedia di peta.
+const DEFAULT_LAT = -7.793;
+const DEFAULT_LON = 110.365;
+
+const STATUS_COPY: Record<
+  SubmitThreadResult["status"],
+  { title: string; tone: "success" | "info" | "warning" | "error" }
+> = {
+  APPROVED: {
+    title: "Laporan berhasil dikirim dan langsung tayang di feed.",
+    tone: "success",
+  },
+  MERGED_DUPLICATE: {
+    title: "Laporan serupa sudah ada di lokasi ini — suaramu ditambahkan ke laporan itu.",
+    tone: "info",
+  },
+  FLAGGED_REVIEW: {
+    title: "Laporan diterima dan sedang ditinjau moderator sebelum tayang.",
+    tone: "warning",
+  },
+  REJECTED: {
+    title: "Laporan ditolak. Periksa kembali deskripsi laporanmu.",
+    tone: "error",
+  },
+};
+
 export default function ReportComposerModal({
   onClose,
   onSubmit,
 }: ReportComposerModalProps) {
-  const [selectedCat, setSelectedCat] = useState<CategoryKey>("jalan_rusak");
+  const [selectedCat, setSelectedCat] = useState<CategoryKey>("Jalan Rusak");
   const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ status: SubmitThreadResult["status"]; reason?: string } | null>(
+    null
+  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (submitting || !description.trim()) return;
+    setSubmitting(true);
+    setErrorMessage(null);
+    setResult(null);
+    try {
+      const res = await submitThread({
+        category: selectedCat,
+        description: description.trim(),
+        lat: DEFAULT_LAT,
+        lon: DEFAULT_LON,
+      });
+      setResult({ status: res.status, reason: res.moderation_reason });
+      if (res.status === "APPROVED" || res.status === "MERGED_DUPLICATE") {
+        onSubmit({ cat: selectedCat, description: description.trim() });
+      }
+    } catch (err) {
+      if (err instanceof ProxyApiError && err.status === 401) {
+        setErrorMessage("Kamu harus masuk terlebih dahulu untuk membuat laporan.");
+      } else {
+        setErrorMessage("Gagal mengirim laporan. Coba lagi nanti.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="overlay-backdrop" onClick={onClose}>
@@ -79,11 +139,41 @@ export default function ReportComposerModal({
             Menggunakan lokasi saat ini di peta
           </div>
 
+          {result && (
+            <div
+              style={{
+                marginTop: 10,
+                marginBottom: 4,
+                fontSize: 12.5,
+                fontWeight: 600,
+                color:
+                  STATUS_COPY[result.status].tone === "success"
+                    ? "#15803d"
+                    : STATUS_COPY[result.status].tone === "info"
+                      ? "#1d4ed8"
+                      : STATUS_COPY[result.status].tone === "warning"
+                        ? "#b45309"
+                        : "#b91c1c",
+              }}
+            >
+              {STATUS_COPY[result.status].title}
+              {result.reason ? ` (${result.reason})` : ""}
+            </div>
+          )}
+
+          {errorMessage && (
+            <div style={{ marginTop: 10, marginBottom: 4, fontSize: 12.5, fontWeight: 600, color: "#b91c1c" }}>
+              {errorMessage}
+            </div>
+          )}
+
           <button
             className="btn-primary"
-            onClick={() => onSubmit({ cat: selectedCat, description })}
+            onClick={handleSubmit}
+            disabled={submitting || !description.trim()}
+            style={{ opacity: submitting || !description.trim() ? 0.6 : 1 }}
           >
-            Kirim Laporan
+            {submitting ? "Mengirim..." : "Kirim Laporan"}
           </button>
         </div>
       </div>

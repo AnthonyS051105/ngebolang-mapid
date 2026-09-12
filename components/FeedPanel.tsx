@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   LayoutGrid,
@@ -9,20 +9,49 @@ import {
   MessageCircle,
   ThumbsUp,
 } from "lucide-react";
-import { CAT, reportPins, tabKeyMap, tabs } from "@/lib/data";
-import type { ReportPin } from "@/lib/types";
+import { categoryOf, tabKeyMap, tabs } from "@/lib/data";
+import { fetchThreads } from "@/lib/api/routingClient";
+import type { ThreadItem } from "@/lib/types/routingApi";
 
 interface FeedPanelProps {
-  onOpenThread: (report: ReportPin) => void;
+  onOpenThread: (thread: ThreadItem) => void;
+}
+
+const FALLBACK_PHOTO =
+  "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800&q=80";
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Baru saja";
+  if (mins < 60) return `${mins} menit lalu`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} jam lalu`;
+  return `${Math.floor(hours / 24)} hari lalu`;
 }
 
 export default function FeedPanel({ onOpenThread }: FeedPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [view, setView] = useState<"card" | "list">("card");
+  const [threads, setThreads] = useState<ThreadItem[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const list = reportPins.filter(
-    (r) => activeTab === "Semua" || r.cat === tabKeyMap[activeTab]
+  useEffect(() => {
+    let cancelled = false;
+    fetchThreads("APPROVED")
+      .then((items) => {
+        if (!cancelled) setThreads(items);
+      })
+      .catch((err) => {
+        console.error("Gagal memuat laporan warga dari backend:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const list = threads.filter(
+    (t) => activeTab === "Semua" || t.category === tabKeyMap[activeTab]
   );
 
   const scrollNext = () => {
@@ -62,37 +91,41 @@ export default function FeedPanel({ onOpenThread }: FeedPanelProps) {
         </div>
       </div>
 
-      {view === "card" ? (
+      {list.length === 0 ? (
+        <div className="feed-empty" style={{ padding: "16px 4px", fontSize: 12.5, color: "#9aa2b1" }}>
+          Belum ada laporan warga untuk kategori ini.
+        </div>
+      ) : view === "card" ? (
         <div className="feed-cards-wrap">
           <div className="feed-cards" ref={scrollRef}>
-            {list.map((r) => {
-              const c = CAT[r.cat];
+            {list.map((t) => {
+              const c = categoryOf(t.category);
               return (
                 <div
                   className="fcard"
-                  key={r.id}
-                  onClick={() => onOpenThread(r)}
+                  key={t.id}
+                  onClick={() => onOpenThread(t)}
                 >
                   <div
                     className="thumb"
-                    style={{ backgroundImage: `url(${r.photo})` }}
+                    style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
                   >
                     <span className="cat" style={{ background: c.color }}>
                       {c.label}
                     </span>
-                    <span className="time">{r.time}</span>
+                    <span className="time">{timeAgo(t.created_at)}</span>
                   </div>
                   <div className="body">
-                    <div className="title">{r.title}</div>
+                    <div className="title">{t.description || "(Tanpa deskripsi)"}</div>
                     <div className="loc">
-                      <MapPin width={11} height={11} /> {r.loc}
+                      <MapPin width={11} height={11} /> {t.reporter_name || "Warga"}
                     </div>
                     <div className="stats">
                       <span>
-                        <ThumbsUp width={12} height={12} /> {r.likes}
+                        <ThumbsUp width={12} height={12} /> {t.upvotes}
                       </span>
                       <span>
-                        <MessageCircle width={12} height={12} /> {r.comments}
+                        <MessageCircle width={12} height={12} /> 0
                       </span>
                     </div>
                   </div>
@@ -106,24 +139,24 @@ export default function FeedPanel({ onOpenThread }: FeedPanelProps) {
         </div>
       ) : (
         <div className="feed-list">
-          {list.map((r) => (
+          {list.map((t) => (
             <div
               className="feed-list-row"
-              key={r.id}
-              onClick={() => onOpenThread(r)}
+              key={t.id}
+              onClick={() => onOpenThread(t)}
             >
               <div
                 className="thumb-sm"
-                style={{ backgroundImage: `url(${r.photo})` }}
+                style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
               />
               <div className="info">
-                <div className="title">{r.title}</div>
+                <div className="title">{t.description || "(Tanpa deskripsi)"}</div>
                 <div className="loc">
-                  <MapPin width={11} height={11} /> {r.loc}
+                  <MapPin width={11} height={11} /> {t.reporter_name || "Warga"}
                 </div>
               </div>
               <div className="likes">
-                <ThumbsUp width={12} height={12} /> {r.likes}
+                <ThumbsUp width={12} height={12} /> {t.upvotes}
               </div>
             </div>
           ))}

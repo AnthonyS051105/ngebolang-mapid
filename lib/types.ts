@@ -1,9 +1,12 @@
+// 6 nilai kategori ASLI dari backend Python (community/moderator.py via /api/threads) --
+// lihat docs/UI_UX_FLOW.md Bagian 5. Jangan menggantinya dengan 4-5 kategori lama.
 export type CategoryKey =
-  | "jalan_rusak"
-  | "kemacetan"
-  | "halte_penuh"
-  | "trotoar_terhalang"
-  | "info";
+  | "Macet"
+  | "Banjir / Genangan"
+  | "Jalan Rusak"
+  | "Parkir Liar"
+  | "Pasar Tumpah / Event"
+  | "Lainnya";
 
 export interface Category {
   label: string;
@@ -23,21 +26,6 @@ export interface Comment {
   author: string;
   text: string;
   time: string;
-}
-
-export interface ReportPin {
-  id: string;
-  cat: CategoryKey;
-  lat: number;
-  lng: number;
-  title: string;
-  loc: string;
-  time: string;
-  likes: number;
-  comments: number;
-  photo: string;
-  description: string;
-  commentList: Comment[];
 }
 
 export interface HeatSpot {

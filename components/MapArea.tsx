@@ -15,9 +15,9 @@ import {
   Sun,
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
-import type { LayerDef, ReportPin } from "@/lib/types";
-import { fetchPoi } from "@/lib/api/routingClient";
-import type { PoiItem, RouteResponse } from "@/lib/types/routingApi";
+import type { LayerDef } from "@/lib/types";
+import { fetchPoi, fetchThreads } from "@/lib/api/routingClient";
+import type { PoiItem, RouteResponse, ThreadItem } from "@/lib/types/routingApi";
 import type { MapViewHandle, RouteDisplayOptions } from "./MapView";
 import FeedPanel from "./FeedPanel";
 import PoiPopup from "./PoiPopup";
@@ -38,10 +38,11 @@ interface MapAreaProps {
 function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<MapAreaHandle>) {
   const [layerDefs, setLayerDefs] = useState<LayerDef[]>(initialLayerDefs);
   const [poiItems, setPoiItems] = useState<PoiItem[]>([]);
+  const [threadItems, setThreadItems] = useState<ThreadItem[]>([]);
   const [activePoi, setActivePoi] = useState<{ poi: PoiItem; x: number; y: number } | null>(
     null
   );
-  const [activeThread, setActiveThread] = useState<ReportPin | null>(null);
+  const [activeThread, setActiveThread] = useState<ThreadItem | null>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -58,6 +59,13 @@ function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<M
       })
       .catch((err) => {
         console.error("Gagal memuat POI dari backend:", err);
+      });
+    fetchThreads("APPROVED")
+      .then((items) => {
+        if (!cancelled) setThreadItems(items);
+      })
+      .catch((err) => {
+        console.error("Gagal memuat laporan warga dari backend:", err);
       });
     return () => {
       cancelled = true;
@@ -80,12 +88,14 @@ function MapArea({ showPlanner, onClosePlanner }: MapAreaProps, ref: React.Ref<M
       <MapView
         layerDefs={initialLayerDefs}
         poiItems={poiItems}
+        threadItems={threadItems}
         onReady={(handle) => {
           handleRef.current = handle;
         }}
         onPoiClick={(poi, x, y) =>
           setActivePoi({ poi, x, y: Math.max(y, 220) })
         }
+        onThreadClick={setActiveThread}
       />
 
       <div className="top-bar">

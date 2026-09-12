@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type L from "leaflet";
-import { CAT, heatSpots, places, reportPins } from "@/lib/data";
+import { categoryOf, heatSpots, places } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
 import type { LayerDef } from "@/lib/types";
-import type { PoiItem } from "@/lib/types/routingApi";
+import type { PoiItem, ThreadItem } from "@/lib/types/routingApi";
 
 export interface RouteDisplayOptions {
   walkOnly?: boolean;
@@ -24,8 +24,10 @@ export interface MapViewHandle {
 interface MapViewProps {
   layerDefs: LayerDef[];
   poiItems: PoiItem[];
+  threadItems: ThreadItem[];
   onReady?: (handle: MapViewHandle) => void;
   onPoiClick?: (poi: PoiItem, x: number, y: number) => void;
+  onThreadClick?: (thread: ThreadItem) => void;
 }
 
 const POI_CATEGORY_ICON: Record<string, string> = {
@@ -50,18 +52,31 @@ function iconForPoiCategory(category: string) {
   return POI_CATEGORY_ICON[category.toLowerCase()] ?? "map-pin";
 }
 
-export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: MapViewProps) {
+export default function MapView({
+  layerDefs,
+  poiItems,
+  threadItems,
+  onReady,
+  onPoiClick,
+  onThreadClick,
+}: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletModuleRef = useRef<typeof L | null>(null);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  const reportLayerRef = useRef<L.LayerGroup | null>(null);
   const routeApiLayerRef = useRef<L.LayerGroup | null>(null);
   const onPoiClickRef = useRef(onPoiClick);
+  const onThreadClickRef = useRef(onThreadClick);
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
 
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
   }, [onPoiClick]);
+
+  useEffect(() => {
+    onThreadClickRef.current = onThreadClick;
+  }, [onThreadClick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,22 +150,8 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
       placeLayer.addTo(map);
 
       const reportLayer = L.layerGroup();
-      reportPins.forEach((r) => {
-        const c = CAT[r.cat];
-        const icon = L.divIcon({
-          className: "",
-          iconAnchor: [17, 34],
-          iconSize: [34, 34],
-          html: `<div class="pin" style="width:34px;height:34px;background:${c.color}"><span>${iconMarkup(
-            c.icon,
-            { width: 16, height: 16, color: "#fff" }
-          )}</span></div>`,
-        });
-        L.marker([r.lat, r.lng], { icon })
-          .bindPopup(`<b>${r.title}</b><br><small>${r.loc} • ${r.time}</small>`)
-          .addTo(reportLayer);
-      });
       reportLayer.addTo(map);
+      reportLayerRef.current = reportLayer;
 
       const poiLayer = L.layerGroup();
       poiLayer.addTo(map);
@@ -270,6 +271,31 @@ export default function MapView({ layerDefs, poiItems, onReady, onPoiClick }: Ma
       });
     });
   }, [poiItems]);
+
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    const map = leafletMapRef.current;
+    const reportLayer = reportLayerRef.current;
+    if (!L || !map || !reportLayer) return;
+
+    reportLayer.clearLayers();
+    threadItems.forEach((t) => {
+      const c = categoryOf(t.category);
+      const icon = L.divIcon({
+        className: "",
+        iconAnchor: [17, 34],
+        iconSize: [34, 34],
+        html: `<div class="pin" style="width:34px;height:34px;background:${c.color}"><span>${iconMarkup(
+          c.icon,
+          { width: 16, height: 16, color: "#fff" }
+        )}</span></div>`,
+      });
+      const marker = L.marker([t.lat, t.lon], { icon })
+        .bindPopup(`<b>${t.description}</b><br><small>${t.reporter_name || "Warga"}</small>`)
+        .addTo(reportLayer);
+      marker.on("click", () => onThreadClickRef.current?.(t));
+    });
+  }, [threadItems]);
 
   return (
     <>
