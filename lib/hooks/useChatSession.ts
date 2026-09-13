@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchChat, fetchRoute } from "@/lib/api/routingClient";
-import { getOrCreateChatSessionId } from "@/lib/api/chatSession";
+import { getOrCreateChatSessionId, resetChatSessionId } from "@/lib/api/chatSession";
 import type { RouteResponse } from "@/lib/types/routingApi";
 import type { ChatMessageData } from "@/components/ChatMessage";
 import type { RouteDisplayOptions } from "@/components/MapView";
@@ -23,6 +23,13 @@ const DEFAULT_PREFERENCE: RoutePreferenceState = {
   ramahAksesibilitas: false,
 };
 
+export interface SavedChatSession {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: ChatMessageData[];
+}
+
 export interface ChatSessionState {
   messages: ChatMessageData[];
   isSending: boolean;
@@ -31,6 +38,34 @@ export interface ChatSessionState {
   isRefetchingRoute: boolean;
   sendMessage: (text: string) => Promise<void>;
   setActiveRouteMessageId: (id: string) => void;
+  viewMode: "chat" | "history";
+  setViewMode: (mode: "chat" | "history") => void;
+  savedSessions: SavedChatSession[];
+  startNewChat: () => void;
+  loadSession: (session: SavedChatSession) => void;
+  openHistoryView: () => void;
+  openChatView: () => void;
+}
+
+const HISTORY_STORAGE_KEY = "ngebolang_chat_saved_sessions";
+
+function loadSavedSessions(): SavedChatSession[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedSessions(sessions: SavedChatSession[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(sessions.slice(0, 20)));
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 // Diangkat dari ChatPanel supaya sesi (histori + status kirim) tetap hidup
@@ -44,6 +79,8 @@ export function useChatSession(
   const [isSending, setIsSending] = useState(false);
   const [preference, setPreference] = useState<RoutePreferenceState>(DEFAULT_PREFERENCE);
   const [isRefetchingRoute, setIsRefetchingRoute] = useState(false);
+  const [viewMode, setViewMode] = useState<"chat" | "history">("chat");
+  const [savedSessions, setSavedSessions] = useState<SavedChatSession[]>([]);
   const activeRouteMessageIdRef = useRef<string | null>(null);
   const onViewRouteOnMapRef = useRef(onViewRouteOnMap);
 
@@ -53,7 +90,43 @@ export function useChatSession(
 
   useEffect(() => {
     setSessionId(getOrCreateChatSessionId());
+    setSavedSessions(loadSavedSessions());
   }, []);
+
+  // Simpan sesi aktif ke daftar savedSessions tiap ada pesan baru
+  useEffect(() => {
+    if (messages.length === 0 || !sessionId) return;
+    const firstUserMsg = messages.find((m) => m.role === "user");
+    const title = firstUserMsg ? firstUserMsg.text.slice(0, 40) : "Rute Perjalanan";
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    
+    setSavedSessions((prev) => {
+      const idx = prev.findIndex((s) => s.id === sessionId);
+      const updatedItem: SavedChatSession = { id: sessionId, title, timestamp, messages };
+      let next: SavedChatSession[];
+      if (idx >= 0) {
+        next = [...prev];
+        next[idx] = updatedItem;
+      } else {
+        next = [updatedItem, ...prev];
+      }
+      persistSavedSessions(next);
+      return next;
+    });
+  }, [messages, sessionId]);
+
+  const startNewChat = () => {
+    const freshId = resetChatSessionId();
+    setSessionId(freshId);
+    setMessages([]);
+    setViewMode("chat");
+  };
+
+  const loadSession = (sessionItem: SavedChatSession) => {
+    setSessionId(sessionItem.id);
+    setMessages(sessionItem.messages);
+    setViewMode("chat");
+  };
 
   useEffect(() => {
     const activeId = activeRouteMessageIdRef.current;
@@ -173,5 +246,12 @@ export function useChatSession(
     setActiveRouteMessageId: (id: string) => {
       activeRouteMessageIdRef.current = id;
     },
+    viewMode,
+    setViewMode,
+    savedSessions,
+    startNewChat,
+    loadSession,
+    openHistoryView: () => setViewMode("history"),
+    openChatView: () => setViewMode("chat"),
   };
 }

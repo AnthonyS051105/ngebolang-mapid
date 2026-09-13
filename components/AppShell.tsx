@@ -32,6 +32,7 @@ export default function AppShell({ user }: AppShellProps) {
   // Feed -- BUKAN dari tab navbar mobile (navbar sengaja cuma 3 item).
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [plannerMinimized, setPlannerMinimized] = useState(false);
+  const [plannerClosedByX, setPlannerClosedByX] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [feedExpanded, setFeedExpanded] = useState(false);
   const [feedMinimized, setFeedMinimized] = useState(false);
@@ -53,6 +54,7 @@ export default function AppShell({ user }: AppShellProps) {
   const openPlanner = () => {
     setPlannerOpen(true);
     setPlannerMinimized(false);
+    setPlannerClosedByX(false);
     if (isMobile) setShowMobileChat(true);
   };
 
@@ -87,7 +89,7 @@ export default function AppShell({ user }: AppShellProps) {
     id: "ai-trip-planner",
     initialDock: "right",
     initialSize: { width: 380, height: 560 },
-    minSize: { width: 320, height: 420 },
+    minSize: { width: 340, height: 480 },
     maxSize: { width: 560, height: 900 },
     allowedDocks: ["left", "right", "bottom", "float"],
     disabled: isMobile,
@@ -123,14 +125,28 @@ export default function AppShell({ user }: AppShellProps) {
         isMobile={isMobile}
         feedReservedRightInset={plannerRightInset}
         user={user}
+        plannerOpen={plannerOpen && !plannerMinimized}
+        plannerPanelWidth={plannerPanel.size.width}
       />
 
-      {plannerOpen && !isMobile && plannerMinimized && (
+      {(!plannerOpen || plannerMinimized) && !isMobile && (
         <button
           type="button"
           className="panel-minimized-btn chat-panel-minimized-btn"
-          onClick={() => setPlannerMinimized(false)}
-          aria-label="Perluas AI Trip Planner"
+          style={{ bottom: !feedMinimized ? 285 : 86 }}
+          onClick={() => {
+            if (plannerClosedByX || !plannerOpen) {
+              setPlannerOpen(true);
+              setPlannerMinimized(false);
+              setPlannerClosedByX(false);
+              chatSession.openHistoryView();
+            } else {
+              setPlannerOpen(true);
+              setPlannerMinimized(false);
+              chatSession.openChatView();
+            }
+          }}
+          aria-label="Buka AI Trip Planner"
           title="AI Trip Planner"
         >
           <Sparkles width={18} height={18} />
@@ -142,10 +158,14 @@ export default function AppShell({ user }: AppShellProps) {
           <ChatPanel
             session={chatSession}
             onViewRouteOnMap={handleViewRouteOnMap}
-            onMinimize={() => setPlannerMinimized(true)}
+            onMinimize={() => {
+              setPlannerMinimized(true);
+              setPlannerClosedByX(false);
+            }}
             onClose={() => {
               setPlannerOpen(false);
               setPlannerMinimized(false);
+              setPlannerClosedByX(true);
             }}
             dragHandleProps={plannerPanel.dragHandleProps}
           />

@@ -537,16 +537,20 @@ svg.lucide {
   top: 106px;
   left: 18px;
   z-index: 480;
-  width: 222px;
+  width: 245px;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(20, 30, 20, 0.14);
   padding: calc(14px * var(--panel-scale, 1)) calc(14px * var(--panel-scale, 1))
-    calc(8px * var(--panel-scale, 1));
+    calc(10px * var(--panel-scale, 1));
   transition: box-shadow 0.15s;
   /* Konten (font, padding, gap) ikut membesar/mengecil proporsional dengan
      ukuran panel saat di-resize -- lihat --panel-scale di useDockablePanel.ts. */
   font-size: calc(1em * var(--panel-scale, 1));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-border;
+  overflow: hidden;
 }
 .layer-card .floating-panel-head h4 {
   margin: 0 0 calc(10px * var(--panel-scale, 1)) 2px;
@@ -650,18 +654,34 @@ svg.lucide {
   color: #333;
   cursor: pointer;
 }
-.scale-tag {
+.scale-bar {
   position: absolute;
   left: 18px;
   bottom: 270px;
   z-index: 480;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.scale-bar-line {
+  width: 100%;
+  height: 6px;
+  border: 2px solid #3a4152;
+  border-top: none;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 0 0 2px 2px;
+}
+.scale-bar-label {
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #1c2230;
   background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #3a4152;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 /* FEED PANEL (bottom) */
@@ -715,8 +735,25 @@ svg.lucide {
 .feed-tabs {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
+  min-width: 0;
+}
+.feed-tabs-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+.feed-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
 }
 .tab {
   padding: 7px 13px;
@@ -742,7 +779,6 @@ svg.lucide {
 }
 .sort {
   position: relative;
-  margin-left: auto;
   flex: none;
 }
 .sort-trigger {
@@ -1724,8 +1760,10 @@ svg.lucide {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 10px 4px;
+  padding: 10px 6px;
+  min-height: 74px;
   border-radius: 12px;
   border: 1.5px solid var(--card-border);
   cursor: pointer;
@@ -1910,22 +1948,179 @@ svg.lucide {
 }
 .poi-popup .photo .close {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 38px;
-  height: 38px;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  z-index: 20;
   transition: background 0.15s, transform 0.15s;
 }
 .poi-popup .photo .close:hover {
-  background: rgba(0, 0, 0, 0.7);
-  transform: scale(1.05);
+  background: #ef4444;
+  transform: scale(1.1);
+}
+
+/* MapLibre GL popup close button styling */
+.maplibregl-popup-close-button {
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50% !important;
+  color: #374151 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  padding: 0 !important;
+  margin: 6px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: background 0.15s, color 0.15s, transform 0.15s !important;
+}
+.maplibregl-popup-close-button:hover {
+  background: #ef4444 !important;
+  color: #fff !important;
+  transform: scale(1.1);
+}
+
+/* CHAT HISTORY VIEW STYLES */
+.chat-header-pill-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.chat-header-pill-btn:hover {
+  background: var(--green-dark);
+}
+.chat-history-container {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+.start-new-chat-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #f0fdf4;
+  border: 1.5px dashed #22c55e;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 18px;
+  transition: background 0.15s, transform 0.1s;
+}
+.start-new-chat-btn:hover {
+  background: #dcfce7;
+  transform: translateY(-1px);
+}
+.start-new-chat-ic {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.start-new-chat-text {
+  display: flex;
+  flex-direction: column;
+}
+.start-new-chat-text .title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #15803d;
+}
+.start-new-chat-text .sub {
+  font-size: 11px;
+  color: #4b5563;
+  margin-top: 2px;
+}
+.chat-history-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #4b5563;
+  margin-bottom: 10px;
+}
+.chat-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-history-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.chat-history-card:hover {
+  background: #fff;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+.chat-history-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.chat-history-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.chat-history-meta {
+  font-size: 10.5px;
+  color: #6b7280;
+}
+.chat-history-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+.chat-back-to-active-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.chat-back-to-active-btn:hover {
+  background: #e5e7eb;
 }
 .poi-popup .body {
   padding: 14px 16px 16px;

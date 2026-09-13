@@ -147,6 +147,14 @@ export interface MapViewHandle {
   clearRoute: () => void;
 }
 
+/**
+ * Hitung meters-per-pixel di center peta pada zoom tertentu.
+ * Rumus standar Web Mercator: 156543.03 * cos(lat) / 2^zoom.
+ */
+function metersPerPixelAt(zoom: number, lat: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+}
+
 interface MapViewProps {
   layerDefs: LayerDef[];
   poiItems: PoiItem[];
@@ -156,6 +164,9 @@ interface MapViewProps {
   onPoiMove?: (x: number, y: number) => void;
   activePoiId?: string | null;
   onThreadClick?: (thread: ThreadItem) => void;
+  /** Dipanggil tiap kali peta bergerak/zoom berubah dengan nilai meters-per-pixel
+   * di pusat peta -- dipakai MapArea untuk render skala bar dinamis. */
+  onScaleChange?: (metersPerPixel: number) => void;
 }
 
 const POI_CATEGORY_ICON: Record<string, string> = {
@@ -193,7 +204,16 @@ export default function MapView({
   onPoiMove,
   activePoiId,
   onThreadClick,
+  onScaleChange,
 }: MapViewProps) {
+  const onScaleChangeRef = useRef(onScaleChange);
+  useEffect(() => { onScaleChangeRef.current = onScaleChange; }, [onScaleChange]);
+
+  function emitScale(map: maplibregl.Map) {
+    const center = map.getCenter();
+    const mpp = metersPerPixelAt(map.getZoom(), center.lat);
+    onScaleChangeRef.current?.(mpp);
+  }
   const mapRef = useRef<HTMLDivElement>(null);
   const glMapRef = useRef<maplibregl.Map | null>(null);
   const glModuleRef = useRef<typeof maplibregl | null>(null);
@@ -263,6 +283,9 @@ export default function MapView({
         const point = map.project([poi.lon, poi.lat]);
         onPoiMoveRef.current?.(point.x, point.y - 20);
       });
+
+      map.on("move", () => emitScale(map));
+      map.on("zoom", () => emitScale(map));
 
       requestAnimationFrame(() => map.resize());
       const resizeObserver = new ResizeObserver(() => map.resize());
@@ -402,6 +425,7 @@ export default function MapView({
         }
         setMapReady(true);
 
+        emitScale(map);
         onReady?.({
           zoomIn: () => map.zoomIn(),
           zoomOut: () => map.zoomOut(),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircleMore, Minus, Send, Sparkles, X } from "lucide-react";
+import { ChevronRight, Clock, History, MessageCircleMore, Minus, Plus, Send, Sparkles, X } from "lucide-react";
 import type { RouteResponse } from "@/lib/types/routingApi";
 import type { ChatSessionState } from "@/lib/hooks/useChatSession";
 import ChatMessage from "./ChatMessage";
@@ -32,13 +32,129 @@ export default function ChatPanel({
     isRefetchingRoute,
     sendMessage,
     setActiveRouteMessageId,
+    viewMode,
+    openHistoryView,
+    openChatView,
+    savedSessions,
+    startNewChat,
+    loadSession,
   } = session;
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    if (viewMode === "chat") {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, viewMode]);
+
+  if (viewMode === "history") {
+    return (
+      <div className="chat-panel">
+        <div
+          className={`chat-panel-header${dragHandleProps ? " panel-drag-handle" : ""}`}
+          {...dragHandleProps}
+        >
+          <div className="ic">
+            <Sparkles width={17} height={17} />
+          </div>
+          <h2>Riwayat Chat AI</h2>
+          <div className="chat-panel-header-actions">
+            <button
+              type="button"
+              className="chat-header-pill-btn"
+              onClick={startNewChat}
+              title="Mulai Chat Baru"
+            >
+              <Plus width={14} height={14} />
+              <span>Chat Baru</span>
+            </button>
+            {onMinimize && (
+              <button
+                type="button"
+                className="panel-action-btn"
+                onClick={onMinimize}
+                aria-label="Ciutkan AI Trip Planner"
+                title="Ciutkan"
+              >
+                <Minus width={15} height={15} />
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                className="panel-action-btn"
+                onClick={onClose}
+                aria-label="Tutup AI Trip Planner"
+                title="Tutup"
+              >
+                <X width={15} height={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="chat-history-container">
+          <button
+            type="button"
+            className="start-new-chat-btn"
+            onClick={startNewChat}
+          >
+            <div className="start-new-chat-ic">
+              <Plus width={18} height={18} />
+            </div>
+            <div className="start-new-chat-text">
+              <span className="title">+ Mulai Percakapan Baru</span>
+              <span className="sub">Tanyakan rute, lokasi, atau rekomendasi perjalanan</span>
+            </div>
+          </button>
+
+          <div className="chat-history-section-title">
+            <Clock width={14} height={14} />
+            <span>Sesi Percakapan Sebelumnya</span>
+          </div>
+
+          {savedSessions.length === 0 ? (
+            <div className="chat-empty-hint" style={{ padding: "30px 0" }}>
+              <MessageCircleMore width={24} height={24} />
+              <div className="title">Belum ada riwayat percakapan</div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                Klik &quot;Mulai Percakapan Baru&quot; di atas untuk mulai berinteraksi dengan AI Trip Planner.
+              </div>
+            </div>
+          ) : (
+            <div className="chat-history-list">
+              {savedSessions.map((s) => (
+                <div
+                  key={s.id}
+                  className="chat-history-card"
+                  onClick={() => loadSession(s)}
+                >
+                  <div className="chat-history-card-main">
+                    <div className="chat-history-title">{s.title}</div>
+                    <div className="chat-history-meta">
+                      <span>{s.messages.length} pesan</span> • <span>{s.timestamp}</span>
+                    </div>
+                  </div>
+                  <ChevronRight width={16} height={16} color="#9aa0ac" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="chat-history-footer">
+          <button
+            type="button"
+            className="chat-back-to-active-btn"
+            onClick={openChatView}
+          >
+            Kembali ke Percakapan Aktif
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="chat-panel">
@@ -52,6 +168,24 @@ export default function ChatPanel({
         <h2>AI Trip Planner</h2>
         {(onMinimize || onClose) && (
           <div className="chat-panel-header-actions">
+            <button
+              type="button"
+              className="chat-header-pill-btn"
+              onClick={startNewChat}
+              title="Mulai Chat Baru"
+            >
+              <Plus width={14} height={14} />
+              <span>Chat Baru</span>
+            </button>
+            <button
+              type="button"
+              className="panel-action-btn"
+              onClick={openHistoryView}
+              aria-label="Riwayat Percakapan AI"
+              title="Riwayat Percakapan"
+            >
+              <History width={15} height={15} />
+            </button>
             {onMinimize && (
               <button
                 type="button"

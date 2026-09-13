@@ -55,6 +55,10 @@ interface MapAreaProps {
   isMobile?: boolean;
   feedReservedRightInset?: number;
   user: AppShellUser;
+  /** Apakah AI Trip Planner sedang terbuka di sisi kanan (tidak minimized)? */
+  plannerOpen?: boolean;
+  /** Lebar panel AI (px) -- dipakai agar tombol feed-restore pindah ke kirinya. */
+  plannerPanelWidth?: number;
 }
 
 function MapArea(
@@ -68,6 +72,8 @@ function MapArea(
     isMobile = false,
     feedReservedRightInset = 0,
     user,
+    plannerOpen = false,
+    plannerPanelWidth = 0,
   }: MapAreaProps,
   ref: React.Ref<MapAreaHandle>,
 ) {
@@ -83,15 +89,30 @@ function MapArea(
   const [feedFullScreen, setFeedFullScreen] = useState(false);
   const [layerCardMinimized, setLayerCardMinimized] = useState(false);
   const [composerText, setComposerText] = useState("");
+  const [metersPerPixel, setMetersPerPixel] = useState<number | null>(null);
   const mapAreaElRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
+
+  // --- Dynamic scale bar helpers ---
+  /** Pilih jarak "cantik" (50/100/200/500/1000 m) terdekat untuk lebar skala target ~80-100 px */
+  function computeScaleBar(mpp: number): { label: string; widthPx: number } {
+    const targetPx = 90;
+    const meters = mpp * targetPx;
+    const NICE = [5, 10, 25, 50, 100, 200, 500, 1000, 2000, 5000];
+    const chosen = NICE.reduce((prev, cur) =>
+      Math.abs(cur - meters) < Math.abs(prev - meters) ? cur : prev
+    );
+    const widthPx = Math.round(chosen / mpp);
+    const label = chosen >= 1000 ? `${chosen / 1000} km` : `${chosen} m`;
+    return { label, widthPx };
+  }
 
   const layerPanel = useDockablePanel({
     id: "layer-card",
     initialDock: "float",
     initialPosition: { x: 18, y: 106 },
-    initialSize: { width: 222, height: 280 },
-    minSize: { width: 190, height: 160 },
+    initialSize: { width: 245, height: 340 },
+    minSize: { width: 240, height: 320 },
     maxSize: { width: 360, height: 520 },
     dockable: false,
     getBounds: () =>
@@ -157,6 +178,7 @@ function MapArea(
         }
         activePoiId={activePoi?.poi.id ?? null}
         onThreadClick={setActiveThread}
+        onScaleChange={(mpp) => setMetersPerPixel(mpp)}
       />
 
       <div className="top-bar">
@@ -280,7 +302,30 @@ function MapArea(
         </DockablePanel>
       )}
 
-      <div className="map-controls-cluster">
+      {/* Skala peta dinamis */}
+      {metersPerPixel !== null ? (() => {
+        const { label, widthPx } = computeScaleBar(metersPerPixel);
+        return (
+          <div
+            className="scale-bar"
+            style={{
+              width: widthPx,
+              bottom: !feedMinimized ? 285 : 86,
+            }}
+          >
+            <div className="scale-bar-line" />
+            <span className="scale-bar-label">{label}</span>
+          </div>
+        );
+      })() : null}
+
+      <div
+        className="map-controls-cluster"
+        style={{
+          right: plannerOpen && plannerPanelWidth > 0 ? 18 + plannerPanelWidth : 18,
+          bottom: !feedMinimized ? 285 : 86,
+        }}
+      >
         <div
           className="ctrl-btn locate"
           onClick={() => handleRef.current?.locate()}
@@ -304,7 +349,6 @@ function MapArea(
           <Minus width={17} height={17} />
         </div>
       </div>
-      <div className="scale-tag">200 m</div>
 
       <FeedPanel
         onOpenThread={setActiveThread}
@@ -315,6 +359,8 @@ function MapArea(
         onMinimizedChange={onFeedMinimizedChange}
         isMobile={isMobile}
         reservedRightInset={feedReservedRightInset}
+        plannerOpen={plannerOpen}
+        plannerPanelWidth={plannerPanelWidth}
       />
 
       <div className="map-footer">

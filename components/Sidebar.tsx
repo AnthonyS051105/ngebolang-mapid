@@ -1,17 +1,27 @@
 "use client";
 
 import {
+  Bike,
+  Building2,
   Bus,
   Car,
+  CircleParking,
   ChevronsLeft,
   Construction,
-  Footprints,
+  GraduationCap,
   Info,
+  Landmark,
   Leaf,
   Map,
   MessageSquare,
-  SquarePen,
+  ShieldCheck,
+  ShoppingBag,
   Sparkles,
+  SquarePen,
+  Store,
+  Theater,
+  Trees,
+  Waves,
 } from "lucide-react";
 import type { AppShellUser } from "./AppShell";
 
@@ -22,12 +32,30 @@ const navItems = [
   { key: "lapor", label: "Buat Laporan", icon: SquarePen },
 ];
 
-const legendItems = [
-  { label: "Jalan Rusak", color: "var(--red)", icon: Construction },
-  { label: "Kemacetan", color: "var(--orange)", icon: Car },
-  { label: "Halte Penuh", color: "var(--blue)", icon: Bus },
-  { label: "Trotoar Terhalang", color: "var(--purple)", icon: Footprints },
-  { label: "Info Lainnya", color: "var(--gray)", icon: Info },
+// Laporan warga (report threads) — warna sesuai lib/data.ts CAT
+const reportLegendItems = [
+  { label: "Macet", color: "#f5820a", icon: Car },
+  { label: "Banjir / Genangan", color: "#2f7cf6", icon: Waves },
+  { label: "Jalan Rusak", color: "#ef4444", icon: Construction },
+  { label: "Parkir Liar", color: "#9b5cf5", icon: CircleParking },
+  { label: "Pasar Tumpah / Event", color: "#22c55e", icon: Store },
+  { label: "Lainnya", color: "#6b7280", icon: Info },
+];
+
+// POI (fasilitas & tempat wisata) — putih background, sesuai MapView
+const poiLegendItems = [
+  { label: "Situs & Landmark", color: "#4b5563", icon: Landmark },
+  { label: "Museum", color: "#4b5563", icon: Building2 },
+  { label: "Pasar", color: "#4b5563", icon: Store },
+  { label: "Atraksi", color: "#4b5563", icon: Sparkles },
+  { label: "Belanja", color: "#4b5563", icon: ShoppingBag },
+  { label: "Budaya / Seni", color: "#4b5563", icon: Theater },
+  { label: "Halte Transit", color: "#0ea5e9", icon: Bus },
+  { label: "Pangkalan Becak", color: "#9b5cf5", icon: Bike },
+  { label: "Pendidikan", color: "#4b5563", icon: GraduationCap },
+  { label: "Ruang Terbuka", color: "#4b5563", icon: Trees },
+  { label: "Parkir / Fasilitas", color: "#4b5563", icon: CircleParking },
+  { label: "Keamanan", color: "#4b5563", icon: ShieldCheck },
 ];
 
 interface SidebarProps {
@@ -97,9 +125,9 @@ export default function Sidebar({
 
       <hr />
 
-      <div className="side-title">Legenda Laporan</div>
+      <div className="side-title">Laporan Warga</div>
       <div className="legend-list">
-        {legendItems.map(({ label, color, icon: Icon }) => (
+        {reportLegendItems.map(({ label, color, icon: Icon }) => (
           <div className="legend-row" key={label}>
             <div className="legend-dot" style={{ background: color }}>
               <Icon width={12} height={12} color="#fff" />
@@ -116,6 +144,24 @@ export default function Sidebar({
           <span>Rendah</span>
           <span>Tinggi</span>
         </div>
+      </div>
+
+      <div className="side-title">Fasilitas &amp; POI</div>
+      <div className="legend-list">
+        {poiLegendItems.map(({ label, color, icon: Icon }) => (
+          <div className="legend-row" key={label}>
+            <div
+              className="legend-dot"
+              style={{
+                background: color === "#4b5563" ? "#fff" : color,
+                border: color === "#4b5563" ? "1.5px solid #d7dbe2" : "none",
+              }}
+            >
+              <Icon width={12} height={12} color={color} />
+            </div>
+            <span>{label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="sidebar-footer">

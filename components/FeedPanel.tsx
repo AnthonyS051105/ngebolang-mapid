@@ -29,6 +29,10 @@ interface FeedPanelProps {
    * Planner docked-right, supaya kedua panel bersisian, bukan tumpang tindih.
    * Feed Threads sendiri statis (tidak dockable), hanya lebarnya yang menyusut. */
   reservedRightInset?: number;
+  /** Apakah AI Trip Planner sedang terbuka dan tidak minimized? */
+  plannerOpen?: boolean;
+  /** Lebar panel AI (px) -- restore-button feed digeser ke kirinya. */
+  plannerPanelWidth?: number;
 }
 
 const FALLBACK_PHOTO =
@@ -65,6 +69,8 @@ export default function FeedPanel({
   onMinimizedChange,
   isMobile = false,
   reservedRightInset = 0,
+  plannerOpen = false,
+  plannerPanelWidth = 0,
 }: FeedPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [view, setView] = useState<"card" | "list">("card");
@@ -180,10 +186,15 @@ export default function FeedPanel({
   const sheetTranslateY = isMobile ? Math.max(0, sheetHeight - sheetVisiblePx) : undefined;
 
   if (minimized) {
+    // Kalau planner terbuka di kanan, geser tombol restore ke kirinya
+    const restoreRight = plannerOpen && plannerPanelWidth > 0
+      ? 18 + plannerPanelWidth
+      : 18;
     return (
       <button
         type="button"
         className="feed-panel-restore"
+        style={{ right: restoreRight }}
         onClick={() => onMinimizedChange?.(false)}
       >
         <MessageCircle width={16} height={16} />
@@ -213,56 +224,61 @@ export default function FeedPanel({
           )}
         </div>
       </div>
+      {/* feed-tabs: tab pills scroll horizontal. Sort + toggle dikunci di kanan (tidak ikut scroll). */}
       <div className="feed-tabs">
-        {tabs.map((t) => (
-          <div
-            key={t}
-            className={`tab${activeTab === t ? " active" : ""}`}
-            onClick={() => setActiveTab(t)}
-          >
-            {t}
-          </div>
-        ))}
-        <div className="sort" ref={sortMenuRef}>
-          <div className="sort-trigger" onClick={() => setSortMenuOpen((v) => !v)}>
-            {sort === "terbaru" ? "Terbaru" : "Terpopuler"}
-            <ChevronDown width={12} height={12} />
-          </div>
-          {sortMenuOpen && (
-            <div className="sort-menu">
-              <div
-                className={`sort-menu-item${sort === "terbaru" ? " active" : ""}`}
-                onClick={() => {
-                  setSort("terbaru");
-                  setSortMenuOpen(false);
-                }}
-              >
-                Terbaru
-              </div>
-              <div
-                className={`sort-menu-item${sort === "populer" ? " active" : ""}`}
-                onClick={() => {
-                  setSort("populer");
-                  setSortMenuOpen(false);
-                }}
-              >
-                Terpopuler
-              </div>
+        <div className="feed-tabs-scroll">
+          {tabs.map((t) => (
+            <div
+              key={t}
+              className={`tab${activeTab === t ? " active" : ""}`}
+              onClick={() => setActiveTab(t)}
+            >
+              {t}
             </div>
-          )}
+          ))}
         </div>
-        <div className="feed-view-toggle">
-          <div
-            className={`vt-btn${view === "card" ? " active" : ""}`}
-            onClick={() => setView("card")}
-          >
-            <LayoutGrid width={14} height={14} />
+        <div className="feed-tabs-actions">
+          <div className="sort" ref={sortMenuRef}>
+            <div className="sort-trigger" onClick={() => setSortMenuOpen((v) => !v)}>
+              {sort === "terbaru" ? "Terbaru" : "Terpopuler"}
+              <ChevronDown width={12} height={12} />
+            </div>
+            {sortMenuOpen && (
+              <div className="sort-menu">
+                <div
+                  className={`sort-menu-item${sort === "terbaru" ? " active" : ""}`}
+                  onClick={() => {
+                    setSort("terbaru");
+                    setSortMenuOpen(false);
+                  }}
+                >
+                  Terbaru
+                </div>
+                <div
+                  className={`sort-menu-item${sort === "populer" ? " active" : ""}`}
+                  onClick={() => {
+                    setSort("populer");
+                    setSortMenuOpen(false);
+                  }}
+                >
+                  Terpopuler
+                </div>
+              </div>
+            )}
           </div>
-          <div
-            className={`vt-btn${view === "list" ? " active" : ""}`}
-            onClick={() => setView("list")}
-          >
-            <List width={14} height={14} />
+          <div className="feed-view-toggle">
+            <div
+              className={`vt-btn${view === "card" ? " active" : ""}`}
+              onClick={() => setView("card")}
+            >
+              <LayoutGrid width={14} height={14} />
+            </div>
+            <div
+              className={`vt-btn${view === "list" ? " active" : ""}`}
+              onClick={() => setView("list")}
+            >
+              <List width={14} height={14} />
+            </div>
           </div>
         </div>
       </div>
