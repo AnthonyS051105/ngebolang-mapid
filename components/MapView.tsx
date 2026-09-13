@@ -66,6 +66,18 @@ function weightForHeatmapCategory(category: unknown) {
 const HEATMAP_SOURCE_ID = "kepadatan-heatmap-source";
 const HEATMAP_LAYER_ID = "kepadatan-heatmap-layer";
 
+// Pangkalan Becak/Andong (gabungan tarif_becak_andhong + titik_transfer) --
+// 44+44 titik tersebar rapat (jarak terdekat ~37m, median ~54m) di sepanjang
+// koridor Malioboro, saling menutupi kalau dirender sebagai HTML Marker biasa
+// di zoom wajar sehingga sulit diklik satu-satu. Dipakai native GeoJSON
+// cluster source: klik cluster untuk zoom in, klik titik individual untuk
+// popup -- data TIDAK digabung/dicampur, setiap titik tetap membawa field
+// aslinya sendiri (lihat docs/PYTHON_API_CONTRACT.md Bagian 12c).
+const BECAK_CLUSTER_SOURCE_ID = "becak-cluster-source";
+const BECAK_CLUSTER_LAYER_ID = "becak-cluster-circle";
+const BECAK_CLUSTER_COUNT_LAYER_ID = "becak-cluster-count";
+const BECAK_POINT_LAYER_ID = "becak-cluster-point";
+
 // Field properties berbeda antara MAPID live ("Name") dan fallback lokal ("NAMA"/"nama") --
 // lihat docs/PYTHON_API_CONTRACT.md Bagian 12b. Popup menampilkan apa adanya, jadi cukup
 // coba beberapa nama field umum untuk judul kartu.
@@ -293,9 +305,7 @@ export default function MapView({
   const reportMarkersRef = useRef<maplibregl.Marker[]>([]);
   const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
   const halteMarkersRef = useRef<maplibregl.Marker[]>([]);
-  const becakMarkersRef = useRef<maplibregl.Marker[]>([]);
   const waktuTempuhMarkersRef = useRef<maplibregl.Marker[]>([]);
-  const titikTransferMarkersRef = useRef<maplibregl.Marker[]>([]);
   const kondisiFasilitasMarkersRef = useRef<maplibregl.Marker[]>([]);
   const aksesibilitasMarkersRef = useRef<maplibregl.Marker[]>([]);
   const kepadatanMarkersRef = useRef<maplibregl.Marker[]>([]);
@@ -310,9 +320,7 @@ export default function MapView({
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [halteFeatures, setHalteFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
-  const [becakFeatures, setBecakFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
   const [waktuTempuhFeatures, setWaktuTempuhFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
-  const [titikTransferFeatures, setTitikTransferFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
   const [kondisiFasilitasFeatures, setKondisiFasilitasFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
   const [aksesibilitasFeatures, setAksesibilitasFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
   const [kepadatanFeatures, setKepadatanFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
@@ -473,6 +481,96 @@ export default function MapView({
           },
         });
 
+        map.addSource(BECAK_CLUSTER_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+          cluster: true,
+          clusterRadius: 50,
+          clusterMaxZoom: 17,
+        });
+        map.addLayer({
+          id: BECAK_CLUSTER_LAYER_ID,
+          type: "circle",
+          source: BECAK_CLUSTER_SOURCE_ID,
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 25, 24],
+            "circle-color": "#9b5cf5",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: BECAK_CLUSTER_COUNT_LAYER_ID,
+          type: "symbol",
+          source: BECAK_CLUSTER_SOURCE_ID,
+          filter: ["has", "point_count"],
+          layout: {
+            "text-field": ["get", "point_count_abbreviated"],
+            "text-size": 12,
+            "text-font": ["Roboto Medium"],
+          },
+          paint: {
+            "text-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: BECAK_POINT_LAYER_ID,
+          type: "circle",
+          source: BECAK_CLUSTER_SOURCE_ID,
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#9b5cf5",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+        map.on("click", BECAK_CLUSTER_LAYER_ID, async (e) => {
+          const features = map.queryRenderedFeatures(e.point, { layers: [BECAK_CLUSTER_LAYER_ID] });
+          const feature = features[0];
+          const clusterId = feature?.properties?.cluster_id;
+          const source = map.getSource(BECAK_CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+          if (!source || clusterId === undefined || feature.geometry.type !== "Point") return;
+          try {
+            const zoom = await source.getClusterExpansionZoom(clusterId);
+            const [lon, lat] = feature.geometry.coordinates;
+            map.easeTo({ center: [lon, lat], zoom: zoom ?? map.getZoom() + 1 });
+          } catch {
+            // gagal menghitung zoom cluster -- abaikan, tidak kritis
+          }
+        });
+        map.on("mouseenter", BECAK_CLUSTER_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", BECAK_CLUSTER_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "";
+        });
+
+        map.on("click", BECAK_POINT_LAYER_ID, (e) => {
+          const feature = e.features?.[0];
+          if (!feature || feature.geometry.type !== "Point") return;
+          const props = feature.properties as Record<string, unknown>;
+          const source = props._source;
+          const [lon, lat] = feature.geometry.coordinates;
+          const title = featureTitle(
+            props,
+            source === "titik_transfer" ? "Pangkalan (Jarak ke Halte)" : "Pangkalan Becak/Andong"
+          );
+          const fieldDefs = source === "titik_transfer" ? TITIK_TRANSFER_POPUP_FIELDS : BECAK_POPUP_FIELDS;
+          new maplibregl.Popup({ offset: 20 })
+            .setLngLat([lon, lat])
+            .setHTML(fieldsPopupHtml(props, title, fieldDefs))
+            .addTo(map);
+        });
+        map.on("mouseenter", BECAK_POINT_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", BECAK_POINT_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "";
+        });
+
         // Kategori "Kategori Kepadatan" dari dataset survei "kepadatan" (Rendah/Sedang/Tinggi,
         // sama seperti /api/layers/heatmap) digabung sebagai bobot tambahan ke heatmap yang
         // sama -- bukan menggantikan /api/layers/heatmap, cuma melengkapi titiknya.
@@ -531,13 +629,42 @@ export default function MapView({
             console.error("Gagal memuat layer halte & transportasi dari backend:", err);
           });
 
-        fetchPangkalanFeeders()
-          .then((fc) => {
+        // Pangkalan Becak/Andong (cluster gabungan) -- kedua sumber di-tag `_source`
+        // supaya popup per-titik tahu field mana yang harus ditampilkan, TANPA
+        // mencampur data dua pangkalan yang berbeda secara fisik (lihat komentar
+        // di BECAK_CLUSTER_SOURCE_ID di atas).
+        Promise.allSettled([fetchPangkalanFeeders(), fetchTitikTransfer()])
+          .then(([tarifResult, transferResult]) => {
             if (cancelled) return;
-            setBecakFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
-          })
-          .catch((err) => {
-            console.error("Gagal memuat layer pangkalan becak/andong dari backend:", err);
+            const source = map.getSource(BECAK_CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+            if (!source) return;
+
+            const tarifFeatures =
+              tarifResult.status === "fulfilled" ? tarifResult.value.features ?? [] : [];
+            if (tarifResult.status === "rejected") {
+              console.error("Gagal memuat layer pangkalan becak/andong dari backend:", tarifResult.reason);
+            }
+
+            const transferFeatures =
+              transferResult.status === "fulfilled" ? transferResult.value.features ?? [] : [];
+            if (transferResult.status === "rejected") {
+              console.error("Gagal memuat dataset titik transfer antarmoda dari backend:", transferResult.reason);
+            }
+
+            const combined: GeoJSON.FeatureCollection = {
+              type: "FeatureCollection",
+              features: [
+                ...tarifFeatures.map((f) => ({
+                  ...f,
+                  properties: { ...f.properties, _source: "tarif_becak_andhong" },
+                })),
+                ...transferFeatures.map((f) => ({
+                  ...f,
+                  properties: { ...f.properties, _source: "titik_transfer" },
+                })),
+              ],
+            };
+            source.setData(combined);
           });
 
         fetchWaktuTempuh()
@@ -547,15 +674,6 @@ export default function MapView({
           })
           .catch((err) => {
             console.error("Gagal memuat dataset waktu tempuh jalan kaki dari backend:", err);
-          });
-
-        fetchTitikTransfer()
-          .then((fc) => {
-            if (cancelled) return;
-            setTitikTransferFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
-          })
-          .catch((err) => {
-            console.error("Gagal memuat dataset titik transfer antarmoda dari backend:", err);
           });
 
         fetchKondisiFasilitas()
@@ -605,6 +723,16 @@ export default function MapView({
             layerVisibilityRef.current.heatmap === false ? "none" : "visible"
           );
         }
+        {
+          const becakVis = layerVisibilityRef.current.becak === false ? "none" : "visible";
+          [BECAK_CLUSTER_LAYER_ID, BECAK_CLUSTER_COUNT_LAYER_ID, BECAK_POINT_LAYER_ID].forEach(
+            (layerId) => {
+              if (map.getLayer(layerId)) {
+                map.setLayoutProperty(layerId, "visibility", becakVis);
+              }
+            }
+          );
+        }
         setMapReady(true);
 
         emitScale(map);
@@ -635,13 +763,15 @@ export default function MapView({
               halteMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
               });
-              titikTransferMarkersRef.current.forEach((m) => {
-                m.getElement().style.display = visible ? "" : "none";
-              });
             } else if (key === "becak") {
-              becakMarkersRef.current.forEach((m) => {
-                m.getElement().style.display = visible ? "" : "none";
-              });
+              const vis = visible ? "visible" : "none";
+              [BECAK_CLUSTER_LAYER_ID, BECAK_CLUSTER_COUNT_LAYER_ID, BECAK_POINT_LAYER_ID].forEach(
+                (layerId) => {
+                  if (map.getLayer(layerId)) {
+                    map.setLayoutProperty(layerId, "visibility", vis);
+                  }
+                }
+              );
             } else if (key === "trotoar") {
               kondisiFasilitasMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
@@ -741,12 +871,8 @@ export default function MapView({
       reportMarkersRef.current = [];
       halteMarkersRef.current.forEach((m) => m.remove());
       halteMarkersRef.current = [];
-      becakMarkersRef.current.forEach((m) => m.remove());
-      becakMarkersRef.current = [];
       waktuTempuhMarkersRef.current.forEach((m) => m.remove());
       waktuTempuhMarkersRef.current = [];
-      titikTransferMarkersRef.current.forEach((m) => m.remove());
-      titikTransferMarkersRef.current = [];
       kondisiFasilitasMarkersRef.current.forEach((m) => m.remove());
       kondisiFasilitasMarkersRef.current = [];
       aksesibilitasMarkersRef.current.forEach((m) => m.remove());
@@ -855,36 +981,6 @@ export default function MapView({
     });
   }, [halteFeatures, mapReady]);
 
-  useEffect(() => {
-    const maplibregl = glModuleRef.current;
-    const map = glMapRef.current;
-    if (!maplibregl || !map || !mapReady) return;
-
-    becakMarkersRef.current.forEach((m) => m.remove());
-    becakMarkersRef.current = [];
-
-    becakFeatures.forEach((f) => {
-      const [lon, lat] = f.geometry.coordinates;
-      const title = featureTitle(f.properties, "Pangkalan Becak/Andong");
-      const el = document.createElement("div");
-      el.className = "pin";
-      el.style.width = "34px";
-      el.style.height = "34px";
-      el.style.background = "#9b5cf5";
-      el.innerHTML = `<span>${iconMarkup("bike", { width: 16, height: 16, color: "#fff" })}</span>`;
-      if (layerVisibilityRef.current.becak === false) el.style.display = "none";
-
-      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
-        fieldsPopupHtml(f.properties, title, BECAK_POPUP_FIELDS)
-      );
-      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
-        .setLngLat([lon, lat])
-        .setPopup(popup)
-        .addTo(map);
-      becakMarkersRef.current.push(marker);
-    });
-  }, [becakFeatures, mapReady]);
-
   // 7 dataset survei lapangan asli (MAPID GeoServer) -- dipetakan ke toggle
   // 6-layer PRD yang sudah ada (trotoar/halte/poi/heatmap), bukan toggle baru --
   // lihat docs/PYTHON_API_CONTRACT.md Bagian 12c.
@@ -917,36 +1013,6 @@ export default function MapView({
       waktuTempuhMarkersRef.current.push(marker);
     });
   }, [waktuTempuhFeatures, mapReady]);
-
-  useEffect(() => {
-    const maplibregl = glModuleRef.current;
-    const map = glMapRef.current;
-    if (!maplibregl || !map || !mapReady) return;
-
-    titikTransferMarkersRef.current.forEach((m) => m.remove());
-    titikTransferMarkersRef.current = [];
-
-    titikTransferFeatures.forEach((f) => {
-      const [lon, lat] = f.geometry.coordinates;
-      const title = featureTitle(f.properties, "Titik Transfer Antarmoda");
-      const el = document.createElement("div");
-      el.className = "pin";
-      el.style.width = "30px";
-      el.style.height = "30px";
-      el.style.background = "#2563eb";
-      el.innerHTML = `<span>${iconMarkup("arrow-left-right", { width: 14, height: 14, color: "#fff" })}</span>`;
-      if (layerVisibilityRef.current.halte === false) el.style.display = "none";
-
-      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
-        fieldsPopupHtml(f.properties, title, TITIK_TRANSFER_POPUP_FIELDS)
-      );
-      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
-        .setLngLat([lon, lat])
-        .setPopup(popup)
-        .addTo(map);
-      titikTransferMarkersRef.current.push(marker);
-    });
-  }, [titikTransferFeatures, mapReady]);
 
   useEffect(() => {
     const maplibregl = glModuleRef.current;

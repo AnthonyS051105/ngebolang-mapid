@@ -2675,9 +2675,21 @@ svg.lucide {
     width: 44px;
     height: 44px;
   }
-  .layer-card,
   .basemap-pill {
     display: none;
+  }
+  /* Panel Kontrol Layer tetap tampil di mobile (default: tombol ikon minimized,
+     lihat layerCardMinimized di MapArea.tsx) -- diposisikan di bawah top-bar,
+     bukan disembunyikan total seperti sebelumnya. */
+  .layer-card {
+    top: 78px;
+    left: 14px;
+    width: calc(100vw - 28px);
+    max-width: 280px;
+  }
+  .layer-card-minimized-btn {
+    top: 78px;
+    left: 14px;
   }
   /* Cluster zoom digeser ke ~50% tinggi layar -- cukup mudah dijangkau ibu
      jari (tidak terlalu ke atas), sekaligus menyisakan celah tetap di antara

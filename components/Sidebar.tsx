@@ -4,7 +4,6 @@ import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Accessibility,
-  ArrowLeftRight,
   Bike,
   Building2,
   Bus,
@@ -78,10 +77,12 @@ const trotoarLegendItems = [
   { label: "Waktu Tempuh Jalan Kaki", color: "#0d9488", icon: Footprints },
 ];
 
-// Survei halte & transfer antarmoda (MAPID GeoServer, dataset 3) — digabung
-// ke toggle "Halte & Transportasi" yang sudah ada.
-const halteLegendItems = [
-  { label: "Titik Transfer Antarmoda", color: "#2563eb", icon: ArrowLeftRight },
+// Survei tarif & titik transfer (MAPID GeoServer, dataset 1 & 3) — keduanya
+// berisi pangkalan becak/andong (bukan titik halte independen), digabung ke
+// toggle "Pangkalan Becak/Andong" yang sudah ada.
+const becakLegendItems = [
+  { label: "Pangkalan Becak/Andong", color: "#9b5cf5", icon: Bike },
+  { label: "Pangkalan (Jarak ke Halte)", color: "#7c3aed", icon: Bike },
 ];
 
 // Survei kepadatan (MAPID GeoServer, dataset 6) — titik observasi lapangan,
@@ -258,9 +259,9 @@ export default function Sidebar({
               ))}
             </div>
 
-            <div className="side-title">Halte &amp; Transportasi</div>
+            <div className="side-title">Pangkalan Becak/Andong</div>
             <div className="legend-list">
-              {halteLegendItems.map(({ label, color, icon: Icon }) => (
+              {becakLegendItems.map(({ label, color, icon: Icon }) => (
                 <div className="legend-row" key={label}>
                   <div className="legend-dot" style={{ background: color }}>
                     <Icon width={12} height={12} color="#fff" />
