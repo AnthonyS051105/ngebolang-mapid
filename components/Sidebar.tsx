@@ -70,7 +70,11 @@ const poiLegendItems = [
 // Survei kondisi trotoar (MAPID GeoServer, dataset 4 & 2) — lihat
 // docs/PYTHON_API_CONTRACT.md Bagian 12c dan MapView.tsx KONDISI_FASILITAS_POPUP_FIELDS.
 const trotoarLegendItems = [
-  { label: "Kondisi Fasilitas (Halte/Trotoar)", color: "#f97316", icon: TriangleAlert },
+  {
+    label: "Kondisi Fasilitas (Halte/Trotoar)",
+    color: "#f97316",
+    icon: TriangleAlert,
+  },
   { label: "Waktu Tempuh Jalan Kaki", color: "#0d9488", icon: Footprints },
 ];
 
@@ -223,7 +227,7 @@ export default function Sidebar({
               ))}
             </div>
 
-            <div className="side-title">Kepadatan Pengunjung (Real-time)</div>
+            <div className="side-title">Kepadatan Pengunjung</div>
             <div className="density-box">
               <div className="density-bar" />
               <div className="density-labels">
