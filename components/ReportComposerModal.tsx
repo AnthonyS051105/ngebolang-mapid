@@ -1,23 +1,26 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Camera, MapPin, SquarePen, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, MapPin, RefreshCw, SquarePen, X } from "lucide-react";
 import { CAT } from "@/lib/data";
 import { getIcon } from "@/lib/icons";
 import { ProxyApiError, submitThread, type SubmitThreadResult } from "@/lib/api/threadsClient";
 import type { CategoryKey } from "@/lib/types";
 
 interface ReportComposerModalProps {
+  user: { namaTampilan: string };
   onClose: () => void;
   onSubmit: (payload: { cat: CategoryKey; description: string }) => void;
 }
 
 const catKeys = Object.keys(CAT) as CategoryKey[];
 
-// Pusat koridor MVP (Kraton-Titik Nol-Malioboro-Tugu), dipakai sebagai lokasi
-// laporan sampai geolokasi pengguna sungguhan tersedia di peta.
+// Pusat koridor MVP (Kraton-Titik Nol-Malioboro-Tugu) -- dipakai sebagai
+// fallback kalau geolokasi browser ditolak/gagal, BUKAN default utama.
 const DEFAULT_LAT = -7.793;
 const DEFAULT_LON = 110.365;
+
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2MB
 
 const STATUS_COPY: Record<
   SubmitThreadResult["status"],
@@ -42,18 +45,59 @@ const STATUS_COPY: Record<
 };
 
 export default function ReportComposerModal({
+  user,
   onClose,
   onSubmit,
 }: ReportComposerModalProps) {
   const [selectedCat, setSelectedCat] = useState<CategoryKey>("Jalan Rusak");
   const [description, setDescription] = useState("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ status: SubmitThreadResult["status"]; reason?: string } | null>(
     null
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lon: number }>({
+    lat: DEFAULT_LAT,
+    lon: DEFAULT_LON,
+  });
+  const [locationSource, setLocationSource] = useState<"gps" | "default" | "loading">("loading");
+  // Guard supaya hasil getCurrentPosition yang telat (mis. dari permintaan
+  // awal saat mount) tidak menimpa hasil yang lebih baru dari klik "Coba
+  // lagi" yang sempat dipanggil di antaranya.
+  const locationRequestIdRef = useRef(0);
+
+  const requestLocation = () => {
+    const requestId = ++locationRequestIdRef.current;
+    setLocationSource("loading");
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationSource("default");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (locationRequestIdRef.current !== requestId) return;
+        setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setLocationSource("gps");
+      },
+      () => {
+        if (locationRequestIdRef.current !== requestId) return;
+        setLocation({ lat: DEFAULT_LAT, lon: DEFAULT_LON });
+        setLocationSource("default");
+      },
+      { timeout: 8000, maximumAge: 60000 }
+    );
+  };
+
+  useEffect(() => {
+    // getCurrentPosition selalu resolve secara async (callback), jadi
+    // requestLocation() di sini tidak melanggar aturan "no setState sinkron
+    // dalam effect" -- KECUALI cabang unsupported yang setState langsung.
+    // Tunda satu microtask supaya konsisten async di semua jalur.
+    Promise.resolve().then(requestLocation);
+  }, []);
 
   const handleSubmit = async () => {
     if (submitting || !description.trim()) return;
@@ -64,8 +108,9 @@ export default function ReportComposerModal({
       const res = await submitThread({
         category: selectedCat,
         description: description.trim(),
-        lat: DEFAULT_LAT,
-        lon: DEFAULT_LON,
+        lat: location.lat,
+        lon: location.lon,
+        reporter_name: user.namaTampilan,
         ...(photoDataUrl ? { photo_url: photoDataUrl } : {}),
       });
       setResult({ status: res.status, reason: res.moderation_reason });
@@ -160,12 +205,23 @@ export default function ReportComposerModal({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                if (file.size > MAX_PHOTO_BYTES) {
+                  setPhotoError("Ukuran foto maksimal 2MB. Pilih foto lain.");
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  return;
+                }
+                setPhotoError(null);
                 const reader = new FileReader();
                 reader.onload = () => setPhotoDataUrl(reader.result as string);
                 reader.readAsDataURL(file);
               }}
             />
           </div>
+          {photoError && (
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#b91c1c", marginTop: -4, marginBottom: 8 }}>
+              {photoError}
+            </div>
+          )}
 
           <span className="composer-label">Deskripsi</span>
           <textarea
@@ -178,7 +234,29 @@ export default function ReportComposerModal({
           <span className="composer-label">Lokasi</span>
           <div className="composer-location">
             <MapPin width={16} height={16} color="var(--green-dark)" />
-            Menggunakan lokasi saat ini di peta
+            {locationSource === "loading" && "Mendeteksi lokasi GPS..."}
+            {locationSource === "gps" && "Menggunakan lokasi GPS saat ini"}
+            {locationSource === "default" && "Lokasi GPS tidak tersedia — memakai lokasi default (Titik Nol Yogyakarta)"}
+            {locationSource === "default" && (
+              <button
+                type="button"
+                onClick={requestLocation}
+                style={{
+                  marginLeft: "auto",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  border: "none",
+                  background: "none",
+                  color: "var(--green-dark)",
+                  fontWeight: 700,
+                  fontSize: 11.5,
+                  cursor: "pointer",
+                }}
+              >
+                <RefreshCw width={12} height={12} /> Coba lagi
+              </button>
+            )}
           </div>
 
           {result && (

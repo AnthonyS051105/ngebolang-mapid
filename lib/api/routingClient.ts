@@ -1,4 +1,5 @@
 import type {
+  ChatErrorResponse,
   ChatResponse,
   PoiItem,
   RouteRequestBody,
@@ -37,8 +38,12 @@ export const fetchRoute = (body: RouteRequestBody) =>
 export const fetchTarifEstimate = (body: TarifRequestBody) =>
   callPython<TarifResponse>("/api/tarif/estimate", { method: "POST", body: JSON.stringify(body) });
 
+// Python selalu balas HTTP 200 untuk /api/chat, termasuk saat gagal
+// (mis. API key LLM tidak dikonfigurasi) -- bedanya cuma di field `status`
+// ("success" vs "error"), BUKAN status code. Union di sini memaksa
+// pemanggil memeriksa res.status sebelum mengasumsikan res.reply ada.
 export const fetchChat = (message: string, sessionId: string) =>
-  callPython<ChatResponse>("/api/chat", {
+  callPython<ChatResponse | ChatErrorResponse>("/api/chat", {
     method: "POST",
     body: JSON.stringify({ message, session_id: sessionId }),
   });

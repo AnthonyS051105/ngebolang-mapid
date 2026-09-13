@@ -12,11 +12,14 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/threads/[id]/u
     );
   }
 
-  const sudahVote = await db.query(
-    "SELECT 1 FROM upvote_tracking WHERE pengguna_id = $1 AND report_id = $2",
+  // INSERT dulu (bukan SELECT-lalu-INSERT) supaya pemeriksaan "sudah vote"
+  // atomik -- dua klik nyaris bersamaan tidak bisa lolos keduanya, PK
+  // (pengguna_id, report_id) menolak baris kedua sebelum Python dipanggil.
+  const inserted = await db.query(
+    "INSERT INTO upvote_tracking (pengguna_id, report_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
     [session.penggunaId, id]
   );
-  if ((sudahVote.rowCount ?? 0) > 0) {
+  if ((inserted.rowCount ?? 0) === 0) {
     return Response.json(
       {
         error: {
@@ -29,19 +32,21 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/threads/[id]/u
   }
 
   const pythonRes = await fetch(
-    `${process.env.ROUTING_API_URL}/api/threads/${id}/upvote`,
+    `${process.env.ROUTING_API_URL}/api/threads/${encodeURIComponent(id)}/upvote`,
     { method: "POST" }
   );
   if (!pythonRes.ok) {
+    // Panggilan Python gagal -- lepas kembali tanda vote lokal supaya
+    // pengguna bisa mencoba lagi, bukan terkunci 409 selamanya untuk vote
+    // yang sebenarnya tidak pernah tercatat di Python.
+    await db.query(
+      "DELETE FROM upvote_tracking WHERE pengguna_id = $1 AND report_id = $2",
+      [session.penggunaId, id]
+    );
     return Response.json(await pythonRes.json(), { status: pythonRes.status });
   }
 
   const data = await pythonRes.json();
-
-  await db.query(
-    "INSERT INTO upvote_tracking (pengguna_id, report_id) VALUES ($1, $2)",
-    [session.penggunaId, id]
-  );
 
   return Response.json(data);
 }

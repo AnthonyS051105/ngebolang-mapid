@@ -10,6 +10,7 @@ import ReportComposerModal from "./ReportComposerModal";
 import MobileBottomNav from "./MobileBottomNav";
 import { useChatSession } from "@/lib/hooks/useChatSession";
 import { useDockablePanel } from "@/lib/hooks/useDockablePanel";
+import { useThreadsFeed } from "@/lib/hooks/useThreadsFeed";
 import type { RouteResponse } from "@/lib/types/routingApi";
 import type { RouteDisplayOptions } from "./MapView";
 
@@ -79,10 +80,16 @@ export default function AppShell({ user }: AppShellProps) {
   };
 
   const chatSession = useChatSession(handleViewRouteOnMap);
+  const threadsFeed = useThreadsFeed();
 
   const handleComposerSubmit = (text: string) => {
     chatSession.sendMessage(text);
     openPlanner();
+  };
+
+  const handleReportSubmitted = () => {
+    setShowComposer(false);
+    threadsFeed.refetch();
   };
 
   const plannerPanel = useDockablePanel({
@@ -127,6 +134,8 @@ export default function AppShell({ user }: AppShellProps) {
         user={user}
         plannerOpen={plannerOpen && !plannerMinimized}
         plannerPanelWidth={plannerPanel.size.width}
+        threads={threadsFeed.threads}
+        onThreadUpvoted={threadsFeed.applyUpvote}
       />
 
       {(!plannerOpen || plannerMinimized) && !isMobile && (
@@ -174,8 +183,9 @@ export default function AppShell({ user }: AppShellProps) {
 
       {showComposer && (
         <ReportComposerModal
+          user={user}
           onClose={() => setShowComposer(false)}
-          onSubmit={() => setShowComposer(false)}
+          onSubmit={handleReportSubmitted}
         />
       )}
 

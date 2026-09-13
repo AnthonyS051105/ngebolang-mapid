@@ -21,7 +21,6 @@ import { layerDefs as initialLayerDefs } from "@/lib/data";
 import type { LayerDef } from "@/lib/types";
 import {
   fetchPoi,
-  fetchThreads,
   getExportReportsUrl,
 } from "@/lib/api/routingClient";
 import type {
@@ -59,6 +58,11 @@ interface MapAreaProps {
   plannerOpen?: boolean;
   /** Lebar panel AI (px) -- dipakai agar tombol feed-restore pindah ke kirinya. */
   plannerPanelWidth?: number;
+  /** Laporan warga -- dikelola bersama oleh useThreadsFeed() di AppShell,
+   * dipakai bersama oleh peta, FeedPanel, dan FeedFullScreen supaya semuanya
+   * konsisten tanpa fetch duplikat. */
+  threads: ThreadItem[];
+  onThreadUpvoted: (id: string, upvotes: number) => void;
 }
 
 function MapArea(
@@ -74,12 +78,13 @@ function MapArea(
     user,
     plannerOpen = false,
     plannerPanelWidth = 0,
+    threads,
+    onThreadUpvoted,
   }: MapAreaProps,
   ref: React.Ref<MapAreaHandle>,
 ) {
   const [layerDefs, setLayerDefs] = useState<LayerDef[]>(initialLayerDefs);
   const [poiItems, setPoiItems] = useState<PoiItem[]>([]);
-  const [threadItems, setThreadItems] = useState<ThreadItem[]>([]);
   const [activePoi, setActivePoi] = useState<{
     poi: PoiItem;
     x: number;
@@ -100,7 +105,7 @@ function MapArea(
     const meters = mpp * targetPx;
     const NICE = [5, 10, 25, 50, 100, 200, 500, 1000, 2000, 5000];
     const chosen = NICE.reduce((prev, cur) =>
-      Math.abs(cur - meters) < Math.abs(prev - meters) ? cur : prev
+      Math.abs(cur - meters) < Math.abs(prev - meters) ? cur : prev,
     );
     const widthPx = Math.round(chosen / mpp);
     const label = chosen >= 1000 ? `${chosen / 1000} km` : `${chosen} m`;
@@ -112,7 +117,7 @@ function MapArea(
     initialDock: "float",
     initialPosition: { x: 18, y: 106 },
     initialSize: { width: 245, height: 340 },
-    minSize: { width: 240, height: 320 },
+    minSize: { width: 240, height: 300 },
     maxSize: { width: 360, height: 520 },
     dockable: false,
     getBounds: () =>
@@ -136,13 +141,6 @@ function MapArea(
       .catch((err) => {
         console.error("Gagal memuat POI dari backend:", err);
       });
-    fetchThreads("APPROVED")
-      .then((items) => {
-        if (!cancelled) setThreadItems(items);
-      })
-      .catch((err) => {
-        console.error("Gagal memuat laporan warga dari backend:", err);
-      });
     return () => {
       cancelled = true;
     };
@@ -164,7 +162,7 @@ function MapArea(
       <MapView
         layerDefs={layerDefs}
         poiItems={poiItems}
-        threadItems={threadItems}
+        threadItems={threads}
         onReady={(handle) => {
           handleRef.current = handle;
         }}
@@ -303,26 +301,29 @@ function MapArea(
       )}
 
       {/* Skala peta dinamis */}
-      {metersPerPixel !== null ? (() => {
-        const { label, widthPx } = computeScaleBar(metersPerPixel);
-        return (
-          <div
-            className="scale-bar"
-            style={{
-              width: widthPx,
-              bottom: !feedMinimized ? 285 : 86,
-            }}
-          >
-            <div className="scale-bar-line" />
-            <span className="scale-bar-label">{label}</span>
-          </div>
-        );
-      })() : null}
+      {metersPerPixel !== null
+        ? (() => {
+            const { label, widthPx } = computeScaleBar(metersPerPixel);
+            return (
+              <div
+                className="scale-bar"
+                style={{
+                  width: widthPx,
+                  bottom: !feedMinimized ? 285 : 86,
+                }}
+              >
+                <div className="scale-bar-line" />
+                <span className="scale-bar-label">{label}</span>
+              </div>
+            );
+          })()
+        : null}
 
       <div
         className="map-controls-cluster"
         style={{
-          right: plannerOpen && plannerPanelWidth > 0 ? 18 + plannerPanelWidth : 18,
+          right:
+            plannerOpen && plannerPanelWidth > 0 ? 18 + plannerPanelWidth : 18,
           bottom: !feedMinimized ? 285 : 86,
         }}
       >
@@ -351,6 +352,7 @@ function MapArea(
       </div>
 
       <FeedPanel
+        threads={threads}
         onOpenThread={setActiveThread}
         onSeeAll={() => setFeedFullScreen(true)}
         expanded={feedExpanded}
@@ -379,6 +381,7 @@ function MapArea(
 
       {feedFullScreen && (
         <FeedFullScreen
+          threads={threads}
           onOpenThread={setActiveThread}
           onClose={() => setFeedFullScreen(false)}
         />
@@ -388,6 +391,7 @@ function MapArea(
         <ThreadDetailModal
           report={activeThread}
           onClose={() => setActiveThread(null)}
+          onUpvoted={onThreadUpvoted}
         />
       )}
     </main>

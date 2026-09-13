@@ -60,3 +60,21 @@ export const upvoteThread = (threadId: string) =>
     `/api/threads/${encodeURIComponent(threadId)}/upvote`,
     { method: "POST" }
   );
+
+export interface CommentItem {
+  id: string;
+  text: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export const fetchComments = (threadId: string) =>
+  callProxy<{ comments: CommentItem[] }>(
+    `/api/threads/${encodeURIComponent(threadId)}/comments`
+  );
+
+export const submitComment = (threadId: string, text: string) =>
+  callProxy<CommentItem>(`/api/threads/${encodeURIComponent(threadId)}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });

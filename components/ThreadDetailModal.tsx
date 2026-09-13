@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MapPin, MessageCircle, Send, ThumbsUp, X } from "lucide-react";
 import { categoryOf } from "@/lib/data";
-import { ProxyApiError, upvoteThread } from "@/lib/api/threadsClient";
+import {
+  ProxyApiError,
+  fetchComments,
+  submitComment,
+  upvoteThread,
+  type CommentItem,
+} from "@/lib/api/threadsClient";
 import type { ThreadItem } from "@/lib/types/routingApi";
 
 interface ThreadDetailModalProps {
   report: ThreadItem;
   onClose: () => void;
+  onUpvoted?: (id: string, upvotes: number) => void;
 }
 
 const STATUS_LABEL: Record<ThreadItem["status"], string> = {
@@ -31,15 +38,40 @@ function timeAgo(iso: string): string {
 export default function ThreadDetailModal({
   report,
   onClose,
+  onUpvoted,
 }: ThreadDetailModalProps) {
-  const [upvotes, setUpvotes] = useState(report.upvotes);
+  // Pakai report.upvotes langsung (bukan disalin ke state) supaya kalau
+  // useThreadsFeed() di atas me-refresh daftar threads sementara modal ini
+  // terbuka, angkanya ikut ter-update -- localUpvotes cuma dipakai untuk
+  // override optimistic setelah vote sukses supaya tidak menunggu refetch.
+  const [localUpvotes, setLocalUpvotes] = useState<number | null>(null);
+  const upvotes = localUpvotes ?? report.upvotes;
   const [voted, setVoted] = useState(false);
   const [voteMessage, setVoteMessage] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
-  // Backend belum punya endpoint komentar -- input ini murni UI, belum
-  // tersimpan kemana pun. Menyusul setelah mekanisme penyimpanannya siap.
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [loadingComments, setLoadingComments] = useState(true);
   const [commentDraft, setCommentDraft] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [postingComment, setPostingComment] = useState(false);
   const c = categoryOf(report.category);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchComments(report.id)
+      .then((res) => {
+        if (!cancelled) setComments(res.comments);
+      })
+      .catch((err) => {
+        console.error("Gagal memuat komentar:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingComments(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [report.id]);
 
   const handleUpvote = async () => {
     if (voting || voted) return;
@@ -47,8 +79,9 @@ export default function ThreadDetailModal({
     setVoteMessage(null);
     try {
       const res = await upvoteThread(report.id);
-      setUpvotes(res.upvotes);
+      setLocalUpvotes(res.upvotes);
       setVoted(true);
+      onUpvoted?.(report.id, res.upvotes);
     } catch (err) {
       if (err instanceof ProxyApiError && err.status === 401) {
         setVoteMessage("Kamu harus masuk terlebih dahulu untuk memberi suara.");
@@ -60,6 +93,26 @@ export default function ThreadDetailModal({
       }
     } finally {
       setVoting(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    const text = commentDraft.trim();
+    if (!text || postingComment) return;
+    setPostingComment(true);
+    setCommentError(null);
+    try {
+      const newComment = await submitComment(report.id, text);
+      setComments((prev) => [...prev, newComment]);
+      setCommentDraft("");
+    } catch (err) {
+      if (err instanceof ProxyApiError && err.status === 401) {
+        setCommentError("Kamu harus masuk terlebih dahulu untuk berkomentar.");
+      } else {
+        setCommentError("Gagal mengirim komentar. Coba lagi nanti.");
+      }
+    } finally {
+      setPostingComment(false);
     }
   };
 
@@ -127,14 +180,39 @@ export default function ThreadDetailModal({
 
           <div className="thread-comments-section">
             <div className="thread-comments-label">
-              <MessageCircle width={14} height={14} /> Komentar
+              <MessageCircle width={14} height={14} /> Komentar {comments.length > 0 && `(${comments.length})`}
             </div>
-            <div className="thread-comments-empty">Belum ada komentar.</div>
+
+            {loadingComments ? (
+              <div className="thread-comments-empty">Memuat komentar...</div>
+            ) : comments.length === 0 ? (
+              <div className="thread-comments-empty">Belum ada komentar.</div>
+            ) : (
+              <div className="thread-comments-list">
+                {comments.map((cm) => (
+                  <div key={cm.id} className="thread-comment">
+                    <div className="avatar-sm">{cm.authorName.charAt(0).toUpperCase()}</div>
+                    <div className="bubble">
+                      <div className="author">{cm.authorName}</div>
+                      <div className="text">{cm.text}</div>
+                      <div className="time">{timeAgo(cm.createdAt)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {commentError && (
+              <div style={{ fontSize: 12, color: "#b45309", fontWeight: 600, marginTop: 8 }}>
+                {commentError}
+              </div>
+            )}
+
             <form
               className="comment-input-row"
               onSubmit={(e) => {
                 e.preventDefault();
-                setCommentDraft("");
+                handleSubmitComment();
               }}
             >
               <input
@@ -142,8 +220,13 @@ export default function ThreadDetailModal({
                 placeholder="Tulis komentar..."
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
+                disabled={postingComment}
               />
-              <button type="submit" className="comment-send" disabled={!commentDraft.trim()}>
+              <button
+                type="submit"
+                className="comment-send"
+                disabled={!commentDraft.trim() || postingComment}
+              >
                 <Send width={15} height={15} />
               </button>
             </form>

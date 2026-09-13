@@ -12,10 +12,10 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import { categoryOf, tabKeyMap, tabs } from "@/lib/data";
-import { fetchThreads } from "@/lib/api/routingClient";
 import type { ThreadItem } from "@/lib/types/routingApi";
 
 interface FeedPanelProps {
+  threads: ThreadItem[];
   onOpenThread: (thread: ThreadItem) => void;
   /** Buka tampilan "Lihat semua" (halaman penuh satu layar), bukan hanya
    * memperluas panel kecil ini. */
@@ -61,6 +61,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function FeedPanel({
+  threads,
   onOpenThread,
   onSeeAll,
   expanded = false,
@@ -76,7 +77,6 @@ export default function FeedPanel({
   const [view, setView] = useState<"card" | "list">("card");
   const [sort, setSort] = useState<SortKey>("terbaru");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [threads, setThreads] = useState<ThreadItem[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
 
@@ -92,20 +92,6 @@ export default function FeedPanel({
     setPrevExpanded(expanded);
     setSnap(expanded ? "full" : "peek");
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchThreads("APPROVED")
-      .then((items) => {
-        if (!cancelled) setThreads(items);
-      })
-      .catch((err) => {
-        console.error("Gagal memuat laporan warga dari backend:", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!sortMenuOpen) return;

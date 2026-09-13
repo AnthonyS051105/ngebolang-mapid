@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, MapPin, ThumbsUp, X } from "lucide-react";
 import { categoryOf, tabKeyMap, tabs } from "@/lib/data";
-import { fetchThreads } from "@/lib/api/routingClient";
 import type { ThreadItem } from "@/lib/types/routingApi";
 
 interface FeedFullScreenProps {
+  threads: ThreadItem[];
   onOpenThread: (thread: ThreadItem) => void;
   onClose: () => void;
 }
@@ -29,25 +29,10 @@ function timeAgo(iso: string): string {
 // Halaman penuh satu layar untuk membaca semua laporan warga dengan nyaman --
 // dibuka dari "Lihat semua" di FeedPanel, menggantikan perilaku lama yang
 // cuma memperluas panel kecil di tempat.
-export default function FeedFullScreen({ onOpenThread, onClose }: FeedFullScreenProps) {
+export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedFullScreenProps) {
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [sort, setSort] = useState<SortKey>("terbaru");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [threads, setThreads] = useState<ThreadItem[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchThreads("APPROVED")
-      .then((items) => {
-        if (!cancelled) setThreads(items);
-      })
-      .catch((err) => {
-        console.error("Gagal memuat laporan warga dari backend:", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const list = threads
     .filter((t) => activeTab === "Semua" || t.category === tabKeyMap[activeTab])
