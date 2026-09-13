@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Camera, MapPin, RefreshCw, SquarePen, X } from "lucide-react";
 import { CAT } from "@/lib/data";
 import { getIcon } from "@/lib/icons";
@@ -21,6 +22,18 @@ const DEFAULT_LAT = -7.793;
 const DEFAULT_LON = 110.365;
 
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2MB
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const dialogVariants = {
+  hidden: { opacity: 0, scale: 0.96, y: 8 },
+  visible: { opacity: 1, scale: 1, y: 0 },
+};
 
 const STATUS_COPY: Record<
   SubmitThreadResult["status"],
@@ -64,6 +77,9 @@ export default function ReportComposerModal({
     lon: DEFAULT_LON,
   });
   const [locationSource, setLocationSource] = useState<"gps" | "default" | "loading">("loading");
+  const prefersReducedMotion = useReducedMotion();
+  const backdropTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: EASE };
+  const dialogTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: EASE };
   // Guard supaya hasil getCurrentPosition yang telat (mis. dari permintaan
   // awal saat mount) tidak menimpa hasil yang lebih baru dari klik "Coba
   // lagi" yang sempat dipanggil di antaranya.
@@ -129,8 +145,24 @@ export default function ReportComposerModal({
   };
 
   return (
-    <div className="overlay-backdrop" onClick={onClose}>
-      <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
+    <motion.div
+      className="overlay-backdrop"
+      onClick={onClose}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      variants={backdropVariants}
+      transition={backdropTransition}
+    >
+      <motion.div
+        className="overlay-panel"
+        onClick={(e) => e.stopPropagation()}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        variants={dialogVariants}
+        transition={dialogTransition}
+      >
         <div className="overlay-head">
           <SquarePen width={16} height={16} color="var(--green)" />
           <h3>Buat Laporan Baru</h3>
@@ -296,7 +328,7 @@ export default function ReportComposerModal({
             {submitting ? "Mengirim..." : "Kirim Laporan"}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

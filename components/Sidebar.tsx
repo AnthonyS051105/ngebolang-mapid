@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Bike,
   Building2,
@@ -66,6 +67,8 @@ interface SidebarProps {
   user: AppShellUser;
 }
 
+const EASE = [0.22, 1, 0.36, 1] as const;
+
 export default function Sidebar({
   active,
   onNavigate,
@@ -73,6 +76,17 @@ export default function Sidebar({
   onToggleCollapsed,
   user,
 }: SidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
+
+  const labelTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.18, ease: EASE };
+
+  const labelVariants = {
+    hidden: { opacity: 0, x: prefersReducedMotion ? 0 : -8 },
+    visible: { opacity: 1, x: 0 },
+  };
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -93,10 +107,21 @@ export default function Sidebar({
             />
           </div>
         </button>
-        <div className="brand-text">
-          <div className="brand-name">NGEBOLANG</div>
-          <div className="brand-sub">Peta Sosial Mobilitas</div>
-        </div>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              className="brand-text"
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={labelVariants}
+              transition={labelTransition}
+            >
+              <div className="brand-name">NGEBOLANG</div>
+              <div className="brand-sub">Peta Sosial Mobilitas</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Saat collapsed, tombol ini disembunyikan supaya tidak menutupi
             logo -- untuk memperluas menu lagi, klik logo (brand-logo-btn). */}
         {!collapsed && (
@@ -110,7 +135,13 @@ export default function Sidebar({
             aria-label="Ciutkan menu"
             title="Ciutkan menu"
           >
-            <ChevronsLeft width={16} height={16} />
+            <motion.span
+              className="sidebar-collapse-icon-wrap"
+              animate={{ rotate: collapsed ? 180 : 0 }}
+              transition={labelTransition}
+            >
+              <ChevronsLeft width={16} height={16} />
+            </motion.span>
           </button>
         )}
       </div>
@@ -124,58 +155,96 @@ export default function Sidebar({
             title={label}
           >
             <Icon width={17} height={17} />
-            <span className="label">{label}</span>
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.span
+                  className="label"
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                  variants={labelVariants}
+                  transition={labelTransition}
+                >
+                  {label}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
         ))}
       </nav>
 
       <hr />
 
-      <div className="side-title">Laporan Warga</div>
-      <div className="legend-list">
-        {reportLegendItems.map(({ label, color, icon: Icon }) => (
-          <div className="legend-row" key={label}>
-            <div className="legend-dot" style={{ background: color }}>
-              <Icon width={12} height={12} color="#fff" />
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={labelVariants}
+            transition={labelTransition}
+          >
+            <div className="side-title">Laporan Warga</div>
+            <div className="legend-list">
+              {reportLegendItems.map(({ label, color, icon: Icon }) => (
+                <div className="legend-row" key={label}>
+                  <div className="legend-dot" style={{ background: color }}>
+                    <Icon width={12} height={12} color="#fff" />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
-            <span>{label}</span>
-          </div>
-        ))}
-      </div>
 
-      <div className="side-title">Kepadatan Pengunjung (Real-time)</div>
-      <div className="density-box">
-        <div className="density-bar" />
-        <div className="density-labels">
-          <span>Rendah</span>
-          <span>Tinggi</span>
-        </div>
-      </div>
-
-      <div className="side-title">Fasilitas &amp; POI</div>
-      <div className="legend-list">
-        {poiLegendItems.map(({ label, color, icon: Icon }) => (
-          <div className="legend-row" key={label}>
-            <div
-              className="legend-dot"
-              style={{
-                background: color === "#4b5563" ? "#fff" : color,
-                border: color === "#4b5563" ? "1.5px solid #d7dbe2" : "none",
-              }}
-            >
-              <Icon width={12} height={12} color={color} />
+            <div className="side-title">Kepadatan Pengunjung (Real-time)</div>
+            <div className="density-box">
+              <div className="density-bar" />
+              <div className="density-labels">
+                <span>Rendah</span>
+                <span>Tinggi</span>
+              </div>
             </div>
-            <span>{label}</span>
-          </div>
-        ))}
-      </div>
 
+            <div className="side-title">Fasilitas &amp; POI</div>
+            <div className="legend-list">
+              {poiLegendItems.map(({ label, color, icon: Icon }) => (
+                <div className="legend-row" key={label}>
+                  <div
+                    className="legend-dot"
+                    style={{
+                      background: color === "#4b5563" ? "#fff" : color,
+                      border:
+                        color === "#4b5563" ? "1.5px solid #d7dbe2" : "none",
+                    }}
+                  >
+                    <Icon width={12} height={12} color={color} />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="sidebar-footer">
-        <div className="sidebar-user-avatar">{user.namaTampilan.charAt(0).toUpperCase()}</div>
-        <div className="sidebar-user-info">
-          <span className="sidebar-user-name">{user.namaTampilan}</span>
-          <span className="sidebar-user-email">{user.email}</span>
+        <div className="sidebar-user-avatar">
+          {user.namaTampilan.charAt(0).toUpperCase()}
         </div>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              className="sidebar-user-info"
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={labelVariants}
+              transition={labelTransition}
+            >
+              <span className="sidebar-user-name">{user.namaTampilan}</span>
+              <span className="sidebar-user-email">{user.email}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </aside>
   );

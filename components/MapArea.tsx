@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import dynamic from "next/dynamic";
+import { AnimatePresence } from "framer-motion";
 import {
   Download,
   Layers,
@@ -16,6 +17,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  X,
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
 import type { LayerDef } from "@/lib/types";
@@ -103,11 +105,19 @@ function MapArea(
   } | null>(null);
   const [activeThread, setActiveThread] = useState<ThreadItem | null>(null);
   const [feedFullScreen, setFeedFullScreen] = useState(false);
-  const [layerCardMinimized, setLayerCardMinimized] = useState(false);
+  // Default diciutkan supaya peta tidak langsung penuh panel saat pertama
+  // dibuka (progressive disclosure, bukan noisy by default).
+  const [layerCardMinimized, setLayerCardMinimized] = useState(true);
   const [composerText, setComposerText] = useState("");
   const [metersPerPixel, setMetersPerPixel] = useState<number | null>(null);
+  const [poiError, setPoiError] = useState(false);
+  const [poiRetryCount, setPoiRetryCount] = useState(0);
   const mapAreaElRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<MapViewHandle | null>(null);
+  // Tinggi visible bottom sheet Feed di mobile (real-time, termasuk selama
+  // drag) -- dipakai supaya skala peta selalu menempel tepat di atas sheet,
+  // seberapa pun tingginya, bukan dikunci ke satu titik tetap (50vh).
+  const [mobileSheetVisiblePx, setMobileSheetVisiblePx] = useState(0);
 
   // --- Dynamic scale bar helpers ---
   /** Pilih jarak "cantik" (50/100/200/500/1000 m) terdekat untuk lebar skala target ~80-100 px */
@@ -147,15 +157,18 @@ function MapArea(
     let cancelled = false;
     fetchPoi()
       .then((items) => {
-        if (!cancelled) setPoiItems(items);
+        if (cancelled) return;
+        setPoiItems(items);
+        setPoiError(false);
       })
       .catch((err) => {
         console.error("Gagal memuat POI dari backend:", err);
+        if (!cancelled) setPoiError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [poiRetryCount]);
 
   const toggleLayer = (key: string) => {
     setLayerDefs((prev) =>
@@ -189,6 +202,29 @@ function MapArea(
         onThreadClick={setActiveThread}
         onScaleChange={(mpp) => setMetersPerPixel(mpp)}
       />
+
+      {poiError && (
+        <div className="map-error-banner" role="alert">
+          <span className="map-error-banner-text">
+            Gagal memuat data lokasi. Periksa koneksi internet Anda.
+          </span>
+          <button
+            type="button"
+            className="map-error-banner-retry"
+            onClick={() => setPoiRetryCount((c) => c + 1)}
+          >
+            Coba lagi
+          </button>
+          <button
+            type="button"
+            className="map-error-banner-dismiss"
+            onClick={() => setPoiError(false)}
+            aria-label="Tutup peringatan"
+          >
+            <X width={14} height={14} />
+          </button>
+        </div>
+      )}
 
       <div className="top-bar">
         <form
@@ -311,17 +347,24 @@ function MapArea(
         </DockablePanel>
       )}
 
-      {/* Skala peta dinamis */}
+      {/* Skala peta dinamis. Desktop/tablet: offset `bottom` sama persis
+          dengan .map-controls-cluster (cluster zoom kanan) -- 348px saat
+          Feed Panel penuh, 86px saat diciutkan. Mobile: mengikuti tinggi
+          visible bottom sheet Feed secara real-time (termasuk selama drag),
+          plus jarak aman kecil, supaya selalu menempel tepat di atasnya
+          seberapa pun tingginya -- bukan dikunci ke satu titik tetap. */}
       {metersPerPixel !== null
         ? (() => {
             const { label, widthPx } = computeScaleBar(metersPerPixel);
+            const mobileGap = 14;
             return (
               <div
                 className="scale-bar"
-                style={{
-                  width: widthPx,
-                  bottom: !feedMinimized ? 285 : 86,
-                }}
+                style={
+                  isMobile
+                    ? { width: widthPx, bottom: mobileSheetVisiblePx + mobileGap }
+                    : { width: widthPx, bottom: !feedMinimized ? 348 : 86 }
+                }
               >
                 <div className="scale-bar-line" />
                 <span className="scale-bar-label">{label}</span>
@@ -383,7 +426,10 @@ function MapArea(
         reservedRightInset={feedReservedRightInset}
         plannerOpen={plannerOpen}
         plannerPanelWidth={plannerPanelWidth}
-        onSheetVisibleChange={onFeedSheetVisibleChange}
+        onSheetVisibleChange={(visiblePx, viewportHeight, dragging) => {
+          setMobileSheetVisiblePx(visiblePx);
+          onFeedSheetVisibleChange?.(visiblePx, viewportHeight, dragging);
+        }}
       />
 
       <div className="map-footer">
@@ -400,24 +446,30 @@ function MapArea(
         />
       )}
 
-      {feedFullScreen && (
-        <FeedFullScreen
-          threads={threads}
-          onOpenThread={setActiveThread}
-          onClose={() => {
-            setFeedFullScreen(false);
-            onFeedFullScreenChange?.(false);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {feedFullScreen && (
+          <FeedFullScreen
+            key="feed-fullscreen"
+            threads={threads}
+            onOpenThread={setActiveThread}
+            onClose={() => {
+              setFeedFullScreen(false);
+              onFeedFullScreenChange?.(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
-      {activeThread && (
-        <ThreadDetailModal
-          report={activeThread}
-          onClose={() => setActiveThread(null)}
-          onUpvoted={onThreadUpvoted}
-        />
-      )}
+      <AnimatePresence>
+        {activeThread && (
+          <ThreadDetailModal
+            key={activeThread.id}
+            report={activeThread}
+            onClose={() => setActiveThread(null)}
+            onUpvoted={onThreadUpvoted}
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { MapPin, MessageCircle, Send, ThumbsUp, X } from "lucide-react";
 import { categoryOf } from "@/lib/data";
 import {
@@ -23,6 +24,18 @@ const STATUS_LABEL: Record<ThreadItem["status"], string> = {
   MERGED_DUPLICATE: "Digabung dengan laporan lain",
   FLAGGED_REVIEW: "Sedang Ditinjau",
   REJECTED: "Ditolak",
+};
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const dialogVariants = {
+  hidden: { opacity: 0, scale: 0.96, y: 8 },
+  visible: { opacity: 1, scale: 1, y: 0 },
 };
 
 function timeAgo(iso: string): string {
@@ -55,6 +68,9 @@ export default function ThreadDetailModal({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [postingComment, setPostingComment] = useState(false);
   const c = categoryOf(report.category);
+  const prefersReducedMotion = useReducedMotion();
+  const backdropTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: EASE };
+  const dialogTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: EASE };
 
   useEffect(() => {
     let cancelled = false;
@@ -117,8 +133,24 @@ export default function ThreadDetailModal({
   };
 
   return (
-    <div className="overlay-backdrop" onClick={onClose}>
-      <div className="overlay-panel wide" onClick={(e) => e.stopPropagation()}>
+    <motion.div
+      className="overlay-backdrop"
+      onClick={onClose}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      variants={backdropVariants}
+      transition={backdropTransition}
+    >
+      <motion.div
+        className="overlay-panel wide"
+        onClick={(e) => e.stopPropagation()}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        variants={dialogVariants}
+        transition={dialogTransition}
+      >
         <div className="overlay-head">
           <h3>Detail Laporan</h3>
           <div className="overlay-close" onClick={onClose}>
@@ -232,7 +264,7 @@ export default function ThreadDetailModal({
             </form>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

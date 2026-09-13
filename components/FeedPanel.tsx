@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ChevronDown,
   ChevronRight,
@@ -42,7 +43,7 @@ interface FeedPanelProps {
   onSheetVisibleChange?: (
     visiblePx: number,
     viewportHeight: number,
-    dragging: boolean
+    dragging: boolean,
   ) => void;
 }
 
@@ -63,6 +64,13 @@ const SNAP_VISIBLE_PX: Record<SnapPoint, number> = {
 // Seberapa dekat (px) ke titik collapsed/full sebelum drag "menempel" ke sana
 // saat dilepas -- di luar rentang ini, sheet tetap di posisi bebas hasil drag.
 const EDGE_SNAP_THRESHOLD = 40;
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0 },
+};
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -94,6 +102,31 @@ export default function FeedPanel({
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  // ID kartu yang sudah pernah dirender -- supaya entrance animation cuma
+  // main sekali untuk kartu yang benar-benar baru, bukan replay tiap
+  // re-render (ganti tab/sort/dsb). Dihitung & disesuaikan SELAMA render
+  // (pola "adjust state during render" ala React docs, sama seperti
+  // prevExpanded di bawah) berdasarkan identitas `threads`, bukan lewat
+  // effect terpisah -- supaya tidak ada state ekstra yang di-commit
+  // sesudah paint (yang akan bikin kartu baru sempat kelihatan tanpa
+  // animasi sebelum "menyusul" dianimasikan).
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => new Set());
+  const [seenForThreads, setSeenForThreads] = useState<ThreadItem[] | null>(null);
+  if (seenForThreads !== threads) {
+    setSeenForThreads(threads);
+    setSeenIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const t of threads) {
+        if (!next.has(t.id)) {
+          next.add(t.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }
 
   // Tinggi sheet yang terlihat (px dari bawah layar) -- state kontinu, bukan
   // dikunci ke 3 titik tetap, supaya sheet bisa berhenti di posisi bebas
@@ -103,7 +136,9 @@ export default function FeedPanel({
   const [snap, setSnap] = useState<SnapPoint>("peek");
   const [dragVisiblePx, setDragVisiblePx] = useState<number | null>(null);
   const [isDraggingSheet, setIsDraggingSheet] = useState(false);
-  const sheetDragRef = useRef<{ startY: number; startVisible: number } | null>(null);
+  const sheetDragRef = useRef<{ startY: number; startVisible: number } | null>(
+    null,
+  );
   // Lacak transisi prop `expanded` (dikendalikan navigasi eksternal, mis. tab
   // "Feed" mobile) untuk menyesuaikan snap-point saat render, bukan lewat
   // efek terpisah -- pola "adjust state during render" ala React docs.
@@ -116,14 +151,17 @@ export default function FeedPanel({
         ? typeof window !== "undefined"
           ? window.innerHeight
           : SNAP_VISIBLE_PX.full
-        : SNAP_VISIBLE_PX.peek
+        : SNAP_VISIBLE_PX.peek,
     );
   }
 
   useEffect(() => {
     if (!sortMenuOpen) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+      if (
+        sortMenuRef.current &&
+        !sortMenuRef.current.contains(e.target as Node)
+      ) {
         setSortMenuOpen(false);
       }
     };
@@ -136,7 +174,7 @@ export default function FeedPanel({
     .sort((a, b) =>
       sort === "populer"
         ? b.upvotes - a.upvotes
-        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
   const scrollNext = () => {
@@ -177,7 +215,7 @@ export default function FeedPanel({
     const maxVisible = fullVisiblePx();
     const nextVisible = Math.min(
       maxVisible,
-      Math.max(SNAP_VISIBLE_PX.collapsed, drag.startVisible - dy)
+      Math.max(SNAP_VISIBLE_PX.collapsed, drag.startVisible - dy),
     );
     setDragVisiblePx(nextVisible);
     onSheetVisibleChange?.(nextVisible, maxVisible, true);
@@ -208,18 +246,25 @@ export default function FeedPanel({
 
   const sheetVisiblePx = dragVisiblePx ?? visiblePx;
   const sheetHeight = fullVisiblePx();
-  const sheetTranslateY = isMobile ? Math.max(0, sheetHeight - sheetVisiblePx) : undefined;
+  const sheetTranslateY = isMobile
+    ? Math.max(0, sheetHeight - sheetVisiblePx)
+    : undefined;
 
   useEffect(() => {
     if (!isMobile) return;
     onSheetVisibleChange?.(sheetVisiblePx, sheetHeight, isDraggingSheet);
-  }, [isMobile, sheetVisiblePx, sheetHeight, isDraggingSheet, onSheetVisibleChange]);
+  }, [
+    isMobile,
+    sheetVisiblePx,
+    sheetHeight,
+    isDraggingSheet,
+    onSheetVisibleChange,
+  ]);
 
-  if (minimized) {
+  if (minimized && !isMobile) {
     // Kalau planner terbuka di kanan, geser tombol restore ke kirinya
-    const restoreRight = plannerOpen && plannerPanelWidth > 0
-      ? 18 + plannerPanelWidth
-      : 18;
+    const restoreRight =
+      plannerOpen && plannerPanelWidth > 0 ? 18 + plannerPanelWidth : 18;
     return (
       <button
         type="button"
@@ -236,7 +281,7 @@ export default function FeedPanel({
   const body = (
     <>
       <div className="feed-top">
-        <h3>Feed Threads (Laporan Warga Terbaru)</h3>
+        <h3>Feed Threads Laporan Warga</h3>
         <div className="feed-top-actions">
           <button type="button" className="feed-see-all" onClick={handleSeeAll}>
             Lihat semua
@@ -258,63 +303,88 @@ export default function FeedPanel({
       <div className="feed-tabs">
         <div className="feed-tabs-scroll">
           {tabs.map((t) => (
-            <div
+            <button
               key={t}
+              type="button"
               className={`tab${activeTab === t ? " active" : ""}`}
+              aria-pressed={activeTab === t}
               onClick={() => setActiveTab(t)}
             >
               {t}
-            </div>
+            </button>
           ))}
         </div>
         <div className="feed-tabs-actions">
           <div className="sort" ref={sortMenuRef}>
-            <div className="sort-trigger" onClick={() => setSortMenuOpen((v) => !v)}>
+            <button
+              type="button"
+              className="sort-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={sortMenuOpen}
+              onClick={() => setSortMenuOpen((v) => !v)}
+            >
               {sort === "terbaru" ? "Terbaru" : "Terpopuler"}
               <ChevronDown width={12} height={12} />
-            </div>
+            </button>
             {sortMenuOpen && (
-              <div className="sort-menu">
-                <div
+              <div className="sort-menu" role="listbox">
+                <button
+                  type="button"
                   className={`sort-menu-item${sort === "terbaru" ? " active" : ""}`}
+                  role="option"
+                  aria-selected={sort === "terbaru"}
                   onClick={() => {
                     setSort("terbaru");
                     setSortMenuOpen(false);
                   }}
                 >
                   Terbaru
-                </div>
-                <div
+                </button>
+                <button
+                  type="button"
                   className={`sort-menu-item${sort === "populer" ? " active" : ""}`}
+                  role="option"
+                  aria-selected={sort === "populer"}
                   onClick={() => {
                     setSort("populer");
                     setSortMenuOpen(false);
                   }}
                 >
                   Terpopuler
-                </div>
+                </button>
               </div>
             )}
           </div>
-          <div className="feed-view-toggle">
-            <div
+          <div className="feed-view-toggle" role="group" aria-label="Tampilan feed">
+            <button
+              type="button"
               className={`vt-btn${view === "card" ? " active" : ""}`}
+              aria-pressed={view === "card"}
+              aria-label="Tampilan kartu"
+              title="Tampilan kartu"
               onClick={() => setView("card")}
             >
               <LayoutGrid width={14} height={14} />
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className={`vt-btn${view === "list" ? " active" : ""}`}
+              aria-pressed={view === "list"}
+              aria-label="Tampilan daftar"
+              title="Tampilan daftar"
               onClick={() => setView("list")}
             >
               <List width={14} height={14} />
-            </div>
+            </button>
           </div>
         </div>
       </div>
 
       {list.length === 0 ? (
-        <div className="feed-empty" style={{ padding: "16px 4px", fontSize: 12.5, color: "#9aa2b1" }}>
+        <div
+          className="feed-empty"
+          style={{ padding: "16px 4px", fontSize: 12.5, color: "#9aa2b1" }}
+        >
           Belum ada laporan warga untuk kategori ini.
         </div>
       ) : view === "card" ? (
@@ -322,11 +392,22 @@ export default function FeedPanel({
           <div className="feed-cards" ref={scrollRef}>
             {list.map((t) => {
               const c = categoryOf(t.category);
+              const isNew = !seenIds.has(t.id);
               return (
-                <div className="fcard" key={t.id} onClick={() => onOpenThread(t)}>
+                <motion.div
+                  className="fcard"
+                  key={t.id}
+                  onClick={() => onOpenThread(t)}
+                  initial={isNew && !prefersReducedMotion ? "hidden" : false}
+                  animate="visible"
+                  variants={cardVariants}
+                  transition={{ duration: 0.22, ease: EASE }}
+                >
                   <div
                     className="thumb"
-                    style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
+                    style={{
+                      backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})`,
+                    }}
                   >
                     <span className="cat" style={{ background: c.color }}>
                       {c.label}
@@ -334,9 +415,12 @@ export default function FeedPanel({
                     <span className="time">{timeAgo(t.created_at)}</span>
                   </div>
                   <div className="body">
-                    <div className="title">{t.description || "(Tanpa deskripsi)"}</div>
+                    <div className="title">
+                      {t.description || "(Tanpa deskripsi)"}
+                    </div>
                     <div className="loc">
-                      <MapPin width={11} height={11} /> {t.reporter_name || "Warga"}
+                      <MapPin width={11} height={11} />{" "}
+                      {t.reporter_name || "Warga"}
                     </div>
                     <div className="stats">
                       <span>
@@ -344,7 +428,7 @@ export default function FeedPanel({
                       </span>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -354,23 +438,38 @@ export default function FeedPanel({
         </div>
       ) : (
         <div className="feed-list">
-          {list.map((t) => (
-            <div className="feed-list-row" key={t.id} onClick={() => onOpenThread(t)}>
-              <div
-                className="thumb-sm"
-                style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
-              />
-              <div className="info">
-                <div className="title">{t.description || "(Tanpa deskripsi)"}</div>
-                <div className="loc">
-                  <MapPin width={11} height={11} /> {t.reporter_name || "Warga"}
+          {list.map((t) => {
+            const isNew = !seenIds.has(t.id);
+            return (
+              <motion.div
+                className="feed-list-row"
+                key={t.id}
+                onClick={() => onOpenThread(t)}
+                initial={isNew && !prefersReducedMotion ? "hidden" : false}
+                animate="visible"
+                variants={cardVariants}
+                transition={{ duration: 0.22, ease: EASE }}
+              >
+                <div
+                  className="thumb-sm"
+                  style={{
+                    backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})`,
+                  }}
+                />
+                <div className="info">
+                  <div className="title">
+                    {t.description || "(Tanpa deskripsi)"}
+                  </div>
+                  <div className="loc">
+                    <MapPin width={11} height={11} /> {t.reporter_name || "Warga"}
+                  </div>
                 </div>
-              </div>
-              <div className="likes">
-                <ThumbsUp width={12} height={12} /> {t.upvotes}
-              </div>
-            </div>
-          ))}
+                <div className="likes">
+                  <ThumbsUp width={12} height={12} /> {t.upvotes}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </>
@@ -382,7 +481,10 @@ export default function FeedPanel({
         className={`feed-panel mobile-sheet${snap === "full" ? " expanded" : ""}${
           isDraggingSheet ? " sheet-no-transition" : ""
         }`}
-        style={{ transform: `translateY(${sheetTranslateY}px)`, height: sheetHeight }}
+        style={{
+          transform: `translateY(${sheetTranslateY}px)`,
+          height: sheetHeight,
+        }}
       >
         <div
           className="feed-sheet-handle"
@@ -391,7 +493,11 @@ export default function FeedPanel({
           onPointerUp={handleSheetPointerUp}
           onPointerCancel={handleSheetPointerUp}
           role="button"
-          aria-label={snap === "full" ? "Ciutkan bottom sheet feed" : "Perluas bottom sheet feed"}
+          aria-label={
+            snap === "full"
+              ? "Ciutkan bottom sheet feed"
+              : "Perluas bottom sheet feed"
+          }
         >
           <div className="feed-sheet-handle-bar" />
         </div>
@@ -403,7 +509,9 @@ export default function FeedPanel({
   return (
     <div
       className="feed-panel"
-      style={reservedRightInset > 0 ? { right: 18 + reservedRightInset } : undefined}
+      style={
+        reservedRightInset > 0 ? { right: 18 + reservedRightInset } : undefined
+      }
     >
       {body}
     </div>

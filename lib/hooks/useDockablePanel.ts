@@ -44,12 +44,17 @@ export interface DockablePanelState {
   style: React.CSSProperties;
   dragHandleProps: {
     onPointerDown: (e: React.PointerEvent) => void;
+    onDoubleClick: (e: React.MouseEvent) => void;
   };
   getResizeHandleProps: (edge: ResizeEdge) => {
     onPointerDown: (e: React.PointerEvent) => void;
     className: string;
   };
   setDock: (dock: DockSide) => void;
+  /** Kembalikan panel ke dock/ukuran/posisi awal (config `initialDock` dkk.)
+   * -- dipicu lewat double-click pada header/drag-handle, jadi selalu ada
+   * cara memulihkan panel yang "hilang" tanpa perlu hapus localStorage manual. */
+  resetGeometry: () => void;
 }
 
 const DEFAULT_SNAP_THRESHOLD = 28;
@@ -75,6 +80,25 @@ function saveGeometry(id: string, geo: { dock: DockSide; size: Size; position: P
 
 function defaultBounds(): DOMRect {
   return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+/** Pastikan geometri float (size + position) tetap sepenuhnya di dalam
+ * `bounds` -- dipakai saat restore dari localStorage & saat viewport berubah
+ * ukuran, supaya panel yang disimpan dari layar lebih besar (atau di-resize
+ * tinggi lalu jendela dikecilkan) tidak berakhir dengan header/drag-handle-nya
+ * di luar area yang terlihat, membuatnya tampak "macet" tak bisa digeser. */
+function clampFloatGeometry(
+  size: Size,
+  position: Point,
+  bounds: DOMRect,
+  minSize: Size,
+  maxSize?: Size,
+): { size: Size; position: Point } {
+  const width = Math.max(minSize.width, Math.min(size.width, maxSize?.width ?? bounds.width, bounds.width));
+  const height = Math.max(minSize.height, Math.min(size.height, maxSize?.height ?? bounds.height, bounds.height));
+  const x = Math.min(Math.max(position.x, 0), Math.max(0, bounds.width - width));
+  const y = Math.min(Math.max(position.y, 0), Math.max(0, bounds.height - height));
+  return { size: { width, height }, position: { x, y } };
 }
 
 export function useDockablePanel(config: DockablePanelConfig): DockablePanelState {
@@ -110,11 +134,22 @@ export function useDockablePanel(config: DockablePanelConfig): DockablePanelStat
     // Restore geometri tersimpan dari localStorage -- ini hanya bisa dibaca
     // di client setelah mount (SSR tidak punya localStorage), jadi satu kali
     // setState di sini setelah hydration adalah cara yang tepat, bukan anti-pola.
+    // Geometri float di-clamp dulu ke viewport SAAT INI -- kalau tersimpan
+    // dari layar yang lebih besar (atau resize tinggi lalu jendela mengecil),
+    // header/drag-handle panel bisa berakhir di luar area yang terlihat tanpa
+    // ini, membuatnya tampak "macet" tak bisa digeser lagi.
+    const bounds = (getBounds ?? defaultBounds)();
+    const clamped =
+      saved.dock === "float"
+        ? clampFloatGeometry(saved.size, saved.position, bounds, minSize, maxSize)
+        : { size: saved.size, position: saved.position };
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDockState(saved.dock);
-    setSize(saved.size);
-    setPosition(saved.position);
+    setSize(clamped.size);
+    setPosition(clamped.position);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
 
   const dragState = useRef<{
     startX: number;
@@ -167,6 +202,12 @@ export function useDockablePanel(config: DockablePanelConfig): DockablePanelStat
     setDockState(next);
   }, []);
 
+  const resetGeometry = useCallback(() => {
+    setDockState(initialDock);
+    setSize(initialSize);
+    setPosition(initialPosition ?? { x: 120, y: 120 });
+  }, [initialDock, initialSize, initialPosition]);
+
   // Ref memegang nilai terbaru (size/position/dll.) supaya handler pointermove/up
   // yang didaftarkan ke window tetap "stabil" (identitas fungsi tidak berubah)
   // sepanjang satu gesture drag/resize, tanpa perlu re-attach listener tiap render.
@@ -193,6 +234,28 @@ export function useDockablePanel(config: DockablePanelConfig): DockablePanelStat
       snapThreshold,
     };
   });
+
+  // Kalau viewport berubah ukuran (resize browser, rotasi, buka devtools dsb)
+  // sementara panel sedang float, clamp ulang supaya tetap sepenuhnya
+  // terlihat -- tanpa ini, panel yang muat di layar lebar bisa "kehilangan"
+  // header/drag-handle-nya ke luar viewport setelah jendela dikecilkan,
+  // membuat panel tampak macet tak bisa digeser lagi.
+  useEffect(() => {
+    const handleResize = () => {
+      const { dock, size, position, getBounds, minSize, maxSize } = liveRef.current;
+      if (dock !== "float") return;
+      const bounds = (getBounds ?? defaultBounds)();
+      const clamped = clampFloatGeometry(size, position, bounds, minSize, maxSize);
+      if (clamped.size.width !== size.width || clamped.size.height !== size.height) {
+        setSize(clamped.size);
+      }
+      if (clamped.position.x !== position.x || clamped.position.y !== position.y) {
+        setPosition(clamped.position);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const onDragPointerMove = useRef((e: PointerEvent) => {
     const drag = dragState.current;
@@ -395,8 +458,16 @@ export function useDockablePanel(config: DockablePanelConfig): DockablePanelStat
     isDragging,
     isResizing,
     style,
-    dragHandleProps: { onPointerDown: onDragHandlePointerDown },
+    dragHandleProps: {
+      onPointerDown: onDragHandlePointerDown,
+      onDoubleClick: (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest("button, a, input, textarea, select")) return;
+        resetGeometry();
+      },
+    },
     getResizeHandleProps,
     setDock,
+    resetGeometry,
   };
 }

@@ -23,8 +23,12 @@ interface ChatPanelProps {
   onViewRouteOnMap?: (routeData: RouteResponse, options?: RouteDisplayOptions) => void;
   onMinimize?: () => void;
   onClose?: () => void;
-  /** Dipasang di header supaya panel bisa di-drag lewat DockablePanel (desktop). */
-  dragHandleProps?: { onPointerDown: (e: React.PointerEvent) => void };
+  /** Dipasang di header supaya panel bisa di-drag lewat DockablePanel (desktop).
+   * Double-click di header mereset panel ke posisi/ukuran awal. */
+  dragHandleProps?: {
+    onPointerDown: (e: React.PointerEvent) => void;
+    onDoubleClick?: (e: React.MouseEvent) => void;
+  };
 }
 
 export default function ChatPanel({
@@ -57,6 +61,31 @@ export default function ChatPanel({
   const [importing, setImporting] = useState(false);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ID pesan yang sudah pernah dirender -- supaya entrance animation bubble
+  // hanya main sekali untuk pesan yang benar-benar baru, bukan replay untuk
+  // seluruh riwayat tiap kali panel ini re-render (mis. saat mengetik di
+  // input, membuka/menutup panel preferensi, dsb). Dihitung & disesuaikan
+  // SELAMA render (pola "adjust state during render" ala React docs, sama
+  // seperti dipakai di FeedPanel/FeedFullScreen) berdasarkan identitas
+  // `messages`, bukan lewat ref (dilarang diakses saat render) atau effect.
+  const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(() => new Set());
+  const [seenForMessages, setSeenForMessages] = useState<typeof messages | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  if (seenForMessages !== messages) {
+    setSeenForMessages(messages);
+    setSeenMessageIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const m of messages) {
+        if (!next.has(m.id)) {
+          next.add(m.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }
 
   useEffect(() => {
     if (viewMode === "chat") {
@@ -167,35 +196,68 @@ export default function ChatPanel({
             </div>
           ) : (
             <div className="chat-history-list">
-              {savedSessions.map((s) => (
-                <div
-                  key={s.id}
-                  className="chat-history-card"
-                  onClick={() => loadSession(s)}
-                >
-                  <div className="chat-history-card-main">
-                    <div className="chat-history-title">{s.title}</div>
-                    <div className="chat-history-meta">
-                      <span>{s.messageCount} pesan</span> • <span>{timeAgo(s.updatedAt)}</span>
+              {savedSessions.map((s) => {
+                const confirming = confirmDeleteId === s.id;
+                return (
+                  <div
+                    key={s.id}
+                    className="chat-history-card"
+                    onClick={() => (confirming ? undefined : loadSession(s))}
+                  >
+                    <div className="chat-history-card-main">
+                      <div className="chat-history-title">{s.title}</div>
+                      <div className="chat-history-meta">
+                        <span>{s.messageCount} pesan</span> • <span>{timeAgo(s.updatedAt)}</span>
+                      </div>
+                    </div>
+                    <div className="chat-history-card-actions">
+                      {confirming ? (
+                        <>
+                          <button
+                            type="button"
+                            className="chat-history-delete-confirm-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSession(s.id);
+                              setConfirmDeleteId(null);
+                            }}
+                          >
+                            Hapus?
+                          </button>
+                          <button
+                            type="button"
+                            className="chat-history-delete-cancel-btn"
+                            aria-label="Batal hapus"
+                            title="Batal"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(null);
+                            }}
+                          >
+                            Batal
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="chat-history-delete-btn"
+                            aria-label="Hapus sesi"
+                            title="Hapus sesi"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(s.id);
+                            }}
+                          >
+                            <Trash2 width={14} height={14} />
+                          </button>
+                          <ChevronRight width={16} height={16} color="#9aa0ac" />
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="chat-history-card-actions">
-                    <button
-                      type="button"
-                      className="chat-history-delete-btn"
-                      aria-label="Hapus sesi"
-                      title="Hapus sesi"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSession(s.id);
-                      }}
-                    >
-                      <Trash2 width={14} height={14} />
-                    </button>
-                    <ChevronRight width={16} height={16} color="#9aa0ac" />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -290,6 +352,7 @@ export default function ChatPanel({
             <ChatMessage
               key={m.id}
               message={m}
+              animateIn={!seenMessageIds.has(m.id)}
               onSuggestionClick={sendMessage}
               onViewRouteOnMap={(routeData, options) => {
                 setActiveRouteMessageId(m.id);

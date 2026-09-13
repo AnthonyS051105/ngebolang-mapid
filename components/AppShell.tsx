@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import Sidebar from "./Sidebar";
 import MapArea, { type MapAreaHandle } from "./MapArea";
@@ -36,7 +37,11 @@ export default function AppShell({ user }: AppShellProps) {
   const [plannerClosedByX, setPlannerClosedByX] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [feedExpanded, setFeedExpanded] = useState(false);
-  const [feedMinimized, setFeedMinimized] = useState(false);
+  // Default diciutkan di desktop supaya peta tidak langsung penuh panel saat
+  // pertama dibuka (lihat DESIGN.md prinsip "progresif, bukan default ramai")
+  // -- di mobile, Feed dirender sebagai bottom sheet draggable oleh
+  // FeedPanel sendiri, jadi boolean ini efeknya minimal di sana.
+  const [feedMinimized, setFeedMinimized] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   // Mobile only -- tinggi bottom sheet Feed yang sedang terlihat (px dari
   // bawah layar) & tinggi viewport saat itu, dilaporkan real-time oleh
@@ -256,32 +261,37 @@ export default function AppShell({ user }: AppShellProps) {
         </button>
       )}
 
-      {plannerOpen && !isMobile && !plannerMinimized && (
-        <DockablePanel panel={plannerPanel} className="right-panel">
-          <ChatPanel
-            session={chatSession}
-            onViewRouteOnMap={handleViewRouteOnMap}
-            onMinimize={() => {
-              setPlannerMinimized(true);
-              setPlannerClosedByX(false);
-            }}
-            onClose={() => {
-              setPlannerOpen(false);
-              setPlannerMinimized(false);
-              setPlannerClosedByX(true);
-            }}
-            dragHandleProps={plannerPanel.dragHandleProps}
-          />
-        </DockablePanel>
-      )}
+      <AnimatePresence>
+        {plannerOpen && !isMobile && !plannerMinimized && (
+          <DockablePanel key="ai-trip-planner" panel={plannerPanel} className="right-panel">
+            <ChatPanel
+              session={chatSession}
+              onViewRouteOnMap={handleViewRouteOnMap}
+              onMinimize={() => {
+                setPlannerMinimized(true);
+                setPlannerClosedByX(false);
+              }}
+              onClose={() => {
+                setPlannerOpen(false);
+                setPlannerMinimized(false);
+                setPlannerClosedByX(true);
+              }}
+              dragHandleProps={plannerPanel.dragHandleProps}
+            />
+          </DockablePanel>
+        )}
+      </AnimatePresence>
 
-      {showComposer && (
-        <ReportComposerModal
-          user={user}
-          onClose={() => setShowComposer(false)}
-          onSubmit={handleReportSubmitted}
-        />
-      )}
+      <AnimatePresence>
+        {showComposer && (
+          <ReportComposerModal
+            key="report-composer"
+            user={user}
+            onClose={() => setShowComposer(false)}
+            onSubmit={handleReportSubmitted}
+          />
+        )}
+      </AnimatePresence>
 
       {showMobileChat && isMobile && (
         <div className="mobile-chat-overlay">

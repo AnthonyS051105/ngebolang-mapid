@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, MapPin, ThumbsUp, X } from "lucide-react";
 import { categoryOf, tabKeyMap, tabs } from "@/lib/data";
 import type { ThreadItem } from "@/lib/types/routingApi";
@@ -15,6 +16,18 @@ const FALLBACK_PHOTO =
   "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800&q=80";
 
 type SortKey = "terbaru" | "populer";
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+const screenVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0 },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0 },
+};
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -33,6 +46,29 @@ export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedF
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [sort, setSort] = useState<SortKey>("terbaru");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  // Kartu yang ID-nya sudah pernah dirender sebelumnya tidak perlu memutar
+  // ulang animasi entrance saat tab/sort berubah atau ada re-render lain --
+  // hanya kartu yang benar-benar baru (id belum pernah terlihat) yang
+  // dianimasikan masuk. Dihitung & disesuaikan SELAMA render (pola "adjust
+  // state during render" ala React docs) berdasarkan identitas `threads`,
+  // bukan lewat ref (dilarang diakses saat render) atau effect terpisah.
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => new Set());
+  const [seenForThreads, setSeenForThreads] = useState<ThreadItem[] | null>(null);
+  if (seenForThreads !== threads) {
+    setSeenForThreads(threads);
+    setSeenIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const t of threads) {
+        if (!next.has(t.id)) {
+          next.add(t.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }
 
   const list = threads
     .filter((t) => activeTab === "Semua" || t.category === tabKeyMap[activeTab])
@@ -42,8 +78,17 @@ export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedF
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
+  const screenTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: EASE };
+
   return (
-    <div className="feed-fullscreen">
+    <motion.div
+      className="feed-fullscreen"
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      variants={screenVariants}
+      transition={screenTransition}
+    >
       <div className="feed-fullscreen-head">
         <h2>Feed Threads</h2>
         <button
@@ -58,39 +103,53 @@ export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedF
       </div>
       <div className="feed-fullscreen-tabs">
         {tabs.map((t) => (
-          <div
+          <button
             key={t}
+            type="button"
             className={`tab${activeTab === t ? " active" : ""}`}
+            aria-pressed={activeTab === t}
             onClick={() => setActiveTab(t)}
           >
             {t}
-          </div>
+          </button>
         ))}
         <div className="sort">
-          <div className="sort-trigger" onClick={() => setSortMenuOpen((v) => !v)}>
+          <button
+            type="button"
+            className="sort-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={sortMenuOpen}
+            onClick={() => setSortMenuOpen((v) => !v)}
+          >
             {sort === "terbaru" ? "Terbaru" : "Terpopuler"}
             <ChevronDown width={12} height={12} />
-          </div>
+          </button>
           {sortMenuOpen && (
-            <div className="sort-menu">
-              <div
+            <div className="sort-menu" role="listbox">
+              <button
+                type="button"
                 className={`sort-menu-item${sort === "terbaru" ? " active" : ""}`}
+                role="option"
+                aria-selected={sort === "terbaru"}
                 onClick={() => {
                   setSort("terbaru");
                   setSortMenuOpen(false);
                 }}
               >
                 Terbaru
-              </div>
-              <div
+              </button>
+              <button
+                type="button"
                 className={`sort-menu-item${sort === "populer" ? " active" : ""}`}
+                role="option"
+                aria-selected={sort === "populer"}
                 onClick={() => {
                   setSort("populer");
                   setSortMenuOpen(false);
                 }}
               >
                 Terpopuler
-              </div>
+              </button>
             </div>
           )}
         </div>
@@ -105,8 +164,17 @@ export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedF
           <div className="feed-fullscreen-grid">
             {list.map((t) => {
               const c = categoryOf(t.category);
+              const isNew = !seenIds.has(t.id);
               return (
-                <div className="fcard" key={t.id} onClick={() => onOpenThread(t)}>
+                <motion.div
+                  className="fcard"
+                  key={t.id}
+                  onClick={() => onOpenThread(t)}
+                  initial={isNew && !prefersReducedMotion ? "hidden" : false}
+                  animate="visible"
+                  variants={cardVariants}
+                  transition={{ duration: 0.22, ease: EASE }}
+                >
                   <div
                     className="thumb"
                     style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
@@ -127,12 +195,12 @@ export default function FeedFullScreen({ threads, onOpenThread, onClose }: FeedF
                       </span>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
