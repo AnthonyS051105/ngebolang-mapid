@@ -74,6 +74,29 @@ export const fetchTransportHubs = () =>
 export const fetchPangkalanFeeders = () =>
   callPython<GeoJSON.FeatureCollection>("/api/layers/pangkalan-feeders");
 
+// 7 dataset survei lapangan asli (MAPID GeoServer) -- lihat
+// docs/PYTHON_API_CONTRACT.md Bagian 12c. pangkalan_feeders dan
+// tarif-becak-andhong menunjuk ke layer_id MAPID yang SAMA (dataset identik),
+// jadi tidak ada fetcher fetchTarifBecakAndhong terpisah -- fetchPangkalanFeeders
+// di atas sudah otomatis membawa field survei terbaru (Tarif Disepakati, dst).
+export const fetchWaktuTempuh = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/waktu-tempuh");
+
+export const fetchTitikTransfer = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/titik-transfer");
+
+export const fetchKondisiFasilitas = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/kondisi-fasilitas");
+
+export const fetchAksesibilitas = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/aksesibilitas");
+
+export const fetchKepadatan = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/kepadatan");
+
+export const fetchFasilitasPendukung = () =>
+  callPython<GeoJSON.FeatureCollection>("/api/layers/fasilitas-pendukung");
+
 export const getExportReportsUrl = (format: "geojson" | "csv" = "geojson", category?: string) => {
   const params = new URLSearchParams({ format });
   if (category) params.set("category", category);

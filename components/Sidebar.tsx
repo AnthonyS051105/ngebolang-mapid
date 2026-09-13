@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  Accessibility,
+  ArrowLeftRight,
   Bike,
   Building2,
   Bus,
@@ -10,6 +12,7 @@ import {
   CircleParking,
   ChevronsLeft,
   Construction,
+  Footprints,
   GraduationCap,
   Info,
   Landmark,
@@ -21,8 +24,11 @@ import {
   SquarePen,
   Store,
   Theater,
+  TriangleAlert,
   Trees,
+  Users,
   Waves,
+  Wrench,
 } from "lucide-react";
 import type { AppShellUser } from "./AppShell";
 
@@ -57,6 +63,27 @@ const poiLegendItems = [
   { label: "Ruang Terbuka", color: "#4b5563", icon: Trees },
   { label: "Parkir / Fasilitas", color: "#4b5563", icon: CircleParking },
   { label: "Keamanan", color: "#4b5563", icon: ShieldCheck },
+  { label: "Aksesibilitas Difabel", color: "#16a34a", icon: Accessibility },
+  { label: "Fasilitas Pendukung", color: "#64748b", icon: Wrench },
+];
+
+// Survei kondisi trotoar (MAPID GeoServer, dataset 4 & 2) — lihat
+// docs/PYTHON_API_CONTRACT.md Bagian 12c dan MapView.tsx KONDISI_FASILITAS_POPUP_FIELDS.
+const trotoarLegendItems = [
+  { label: "Kondisi Fasilitas (Halte/Trotoar)", color: "#f97316", icon: TriangleAlert },
+  { label: "Waktu Tempuh Jalan Kaki", color: "#0d9488", icon: Footprints },
+];
+
+// Survei halte & transfer antarmoda (MAPID GeoServer, dataset 3) — digabung
+// ke toggle "Halte & Transportasi" yang sudah ada.
+const halteLegendItems = [
+  { label: "Titik Transfer Antarmoda", color: "#2563eb", icon: ArrowLeftRight },
+];
+
+// Survei kepadatan (MAPID GeoServer, dataset 6) — titik observasi lapangan,
+// pelengkap heatmap gradient yang sudah ada.
+const kepadatanLegendItems = [
+  { label: "Titik Observasi Kepadatan", color: "#dc2626", icon: Users },
 ];
 
 interface SidebarProps {
@@ -203,6 +230,40 @@ export default function Sidebar({
                 <span>Rendah</span>
                 <span>Tinggi</span>
               </div>
+            </div>
+            <div className="legend-list">
+              {kepadatanLegendItems.map(({ label, color, icon: Icon }) => (
+                <div className="legend-row" key={label}>
+                  <div className="legend-dot" style={{ background: color }}>
+                    <Icon width={12} height={12} color="#fff" />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="side-title">Kondisi Trotoar</div>
+            <div className="legend-list">
+              {trotoarLegendItems.map(({ label, color, icon: Icon }) => (
+                <div className="legend-row" key={label}>
+                  <div className="legend-dot" style={{ background: color }}>
+                    <Icon width={12} height={12} color="#fff" />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="side-title">Halte &amp; Transportasi</div>
+            <div className="legend-list">
+              {halteLegendItems.map(({ label, color, icon: Icon }) => (
+                <div className="legend-row" key={label}>
+                  <div className="legend-dot" style={{ background: color }}>
+                    <Icon width={12} height={12} color="#fff" />
+                  </div>
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
 
             <div className="side-title">Fasilitas &amp; POI</div>

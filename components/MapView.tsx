@@ -4,7 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import type * as maplibregl from "maplibre-gl";
 import { categoryOf, places } from "@/lib/data";
 import { iconMarkup } from "@/lib/icons";
-import { fetchHeatmap, fetchPangkalanFeeders, fetchTransportHubs } from "@/lib/api/routingClient";
+import {
+  fetchAksesibilitas,
+  fetchFasilitasPendukung,
+  fetchHeatmap,
+  fetchKepadatan,
+  fetchKondisiFasilitas,
+  fetchPangkalanFeeders,
+  fetchTitikTransfer,
+  fetchTransportHubs,
+  fetchWaktuTempuh,
+} from "@/lib/api/routingClient";
 import type { LayerDef } from "@/lib/types";
 import type { PoiItem, ThreadItem } from "@/lib/types/routingApi";
 
@@ -59,7 +69,20 @@ const HEATMAP_LAYER_ID = "kepadatan-heatmap-layer";
 // Field properties berbeda antara MAPID live ("Name") dan fallback lokal ("NAMA"/"nama") --
 // lihat docs/PYTHON_API_CONTRACT.md Bagian 12b. Popup menampilkan apa adanya, jadi cukup
 // coba beberapa nama field umum untuk judul kartu.
-const NAME_FIELD_CANDIDATES = ["Name", "NAMA", "nama", "name", "layer_name", "title"];
+const NAME_FIELD_CANDIDATES = [
+  "Name",
+  "NAMA",
+  "nama",
+  "name",
+  "layer_name",
+  "title",
+  "Lokasi Pangkalan",
+  "Titik Amatan",
+  "Lokasi Presisi",
+  "Nama Segmen (Titik Awal - Titik Akhir)",
+  "Jenis Fasilitas",
+  "Objek yang Diamati",
+];
 
 function featureTitle(properties: Record<string, unknown> | null | undefined, fallback: string) {
   if (!properties) return fallback;
@@ -99,8 +122,16 @@ const HALTE_POPUP_FIELDS: Record<string, PopupField> = {
   },
 };
 
+// Skema lama (MODA/HALTE_TERDEKAT/dst) dipertahankan sebagai fallback --
+// pangkalan_feeders dan tarif_becak_andhong menunjuk ke layer_id MAPID yang
+// sama (lihat docs/PYTHON_API_CONTRACT.md Bagian 12c), tapi kalau suatu saat
+// sumbernya jatuh ke fallback lokal lama, field lama ini masih terbaca.
 const BECAK_POPUP_FIELDS: Record<string, PopupField> = {
+  "Moda": { label: "Moda" },
   MODA: { label: "Moda" },
+  "Rute yang Ditanyakan": { label: "Rute yang Ditanyakan" },
+  "Tarif Disepakati/Wajar": { label: "Tarif Disepakati" },
+  "Narasi": { label: "Catatan", format: (v) => (v === "-" ? "Tidak ada catatan" : String(v)) },
   HALTE_TERDEKAT: { label: "Halte Terdekat" },
   JARAK_KE_HALTE_M: { label: "Jarak ke Halte", format: (v) => `${Math.round(Number(v))} m` },
   WAKTU_JALAN_SEC: {
@@ -112,6 +143,47 @@ const BECAK_POPUP_FIELDS: Record<string, PopupField> = {
   },
   AKSESIBILITAS: { label: "Aksesibilitas", format: (v) => (v === "-" ? "Tidak ada catatan" : String(v)) },
   NARASI: { label: "Catatan", format: (v) => (v === "-" ? "Tidak ada catatan" : String(v)) },
+};
+
+// 7 dataset survei lapangan asli (MAPID GeoServer) -- lihat
+// docs/PYTHON_API_CONTRACT.md Bagian 12c untuk skema lengkap tiap layer.
+const WAKTU_TEMPUH_POPUP_FIELDS: Record<string, PopupField> = {
+  "Jarak Segmen": { label: "Jarak Segmen" },
+  "Total Waktu Tempuh": { label: "Waktu Tempuh" },
+  "Kecepatan Jalan": { label: "Kecepatan Jalan" },
+  "Narasi": { label: "Catatan" },
+};
+
+const TITIK_TRANSFER_POPUP_FIELDS: Record<string, PopupField> = {
+  "Halte TransJogja/Terdekat": { label: "Halte Terdekat" },
+  "Estimasi Waktu Jalan Kaki ke Halte": { label: "Estimasi Jalan Kaki ke Halte" },
+  "Arah/Akses": { label: "Arah / Akses" },
+};
+
+const KONDISI_FASILITAS_POPUP_FIELDS: Record<string, PopupField> = {
+  "Objek yang Diamati": { label: "Objek" },
+  "Jenis Temuan": { label: "Temuan" },
+  "Tingkat Keparahan": { label: "Tingkat Keparahan" },
+  "Dampak bagi Pengguna": { label: "Dampak bagi Pengguna" },
+  "Narasi": { label: "Catatan" },
+};
+
+const AKSESIBILITAS_POPUP_FIELDS: Record<string, PopupField> = {
+  "Jenis Fasilitas": { label: "Jenis Fasilitas" },
+  "Status": { label: "Status" },
+  "Narasi": { label: "Catatan" },
+};
+
+const KEPADATAN_POPUP_FIELDS: Record<string, PopupField> = {
+  "Estimasi Jumlah Orang": { label: "Estimasi Jumlah Orang" },
+  "Kategori Kepadatan": { label: "Kategori Kepadatan" },
+  "Narasi / Konteks Tambahan": { label: "Catatan" },
+};
+
+const FASILITAS_PENDUKUNG_POPUP_FIELDS: Record<string, PopupField> = {
+  "Jenis Fasilitas": { label: "Jenis Fasilitas" },
+  "Lokasi Presisi": { label: "Lokasi" },
+  "Narasi": { label: "Catatan" },
 };
 
 function fieldsPopupHtml(
@@ -222,6 +294,12 @@ export default function MapView({
   const placeMarkersRef = useRef<maplibregl.Marker[]>([]);
   const halteMarkersRef = useRef<maplibregl.Marker[]>([]);
   const becakMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const waktuTempuhMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const titikTransferMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const kondisiFasilitasMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const aksesibilitasMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const kepadatanMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const fasilitasPendukungMarkersRef = useRef<maplibregl.Marker[]>([]);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const layerVisibilityRef = useRef<Record<string, boolean>>({});
   const onPoiClickRef = useRef(onPoiClick);
@@ -233,6 +311,12 @@ export default function MapView({
   const [mapReady, setMapReady] = useState(false);
   const [halteFeatures, setHalteFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
   const [becakFeatures, setBecakFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [waktuTempuhFeatures, setWaktuTempuhFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [titikTransferFeatures, setTitikTransferFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [kondisiFasilitasFeatures, setKondisiFasilitasFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [aksesibilitasFeatures, setAksesibilitasFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [kepadatanFeatures, setKepadatanFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
+  const [fasilitasPendukungFeatures, setFasilitasPendukungFeatures] = useState<GeoJSON.Feature<GeoJSON.Point>[]>([]);
 
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
@@ -389,27 +473,53 @@ export default function MapView({
           },
         });
 
-        fetchHeatmap()
-          .then((fc) => {
+        // Kategori "Kategori Kepadatan" dari dataset survei "kepadatan" (Rendah/Sedang/Tinggi,
+        // sama seperti /api/layers/heatmap) digabung sebagai bobot tambahan ke heatmap yang
+        // sama -- bukan menggantikan /api/layers/heatmap, cuma melengkapi titiknya.
+        Promise.allSettled([fetchHeatmap(), fetchKepadatan()])
+          .then(([heatmapResult, kepadatanResult]) => {
             if (cancelled) return;
             const source = map.getSource(HEATMAP_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
             if (!source) return;
+
+            const heatmapFeatures =
+              heatmapResult.status === "fulfilled" ? heatmapResult.value.features ?? [] : [];
+            if (heatmapResult.status === "rejected") {
+              console.error("Gagal memuat heatmap dari backend:", heatmapResult.reason);
+            }
+
+            const kepadatanFeatures =
+              kepadatanResult.status === "fulfilled"
+                ? (kepadatanResult.value.features ?? [])
+                : [];
+            if (kepadatanResult.status === "rejected") {
+              console.error("Gagal memuat dataset kepadatan dari backend:", kepadatanResult.reason);
+            }
+
             const weighted: GeoJSON.FeatureCollection = {
               type: "FeatureCollection",
-              features: (fc.features ?? [])
-                .filter((f) => f.geometry?.type === "Point")
-                .map((f) => ({
-                  ...f,
-                  properties: {
-                    ...f.properties,
-                    weight: weightForHeatmapCategory(f.properties?.category),
-                  },
-                })),
+              features: [
+                ...heatmapFeatures
+                  .filter((f) => f.geometry?.type === "Point")
+                  .map((f) => ({
+                    ...f,
+                    properties: {
+                      ...f.properties,
+                      weight: weightForHeatmapCategory(f.properties?.category),
+                    },
+                  })),
+                ...kepadatanFeatures
+                  .filter((f) => f.geometry?.type === "Point")
+                  .map((f) => ({
+                    ...f,
+                    properties: {
+                      ...f.properties,
+                      weight: weightForHeatmapCategory(f.properties?.["Kategori Kepadatan"]),
+                    },
+                  })),
+              ],
             };
             source.setData(weighted);
-          })
-          .catch((err) => {
-            console.error("Gagal memuat heatmap dari backend:", err);
           });
 
         fetchTransportHubs()
@@ -428,6 +538,60 @@ export default function MapView({
           })
           .catch((err) => {
             console.error("Gagal memuat layer pangkalan becak/andong dari backend:", err);
+          });
+
+        fetchWaktuTempuh()
+          .then((fc) => {
+            if (cancelled) return;
+            setWaktuTempuhFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat dataset waktu tempuh jalan kaki dari backend:", err);
+          });
+
+        fetchTitikTransfer()
+          .then((fc) => {
+            if (cancelled) return;
+            setTitikTransferFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat dataset titik transfer antarmoda dari backend:", err);
+          });
+
+        fetchKondisiFasilitas()
+          .then((fc) => {
+            if (cancelled) return;
+            setKondisiFasilitasFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat dataset kondisi fasilitas (halte/trotoar) dari backend:", err);
+          });
+
+        fetchAksesibilitas()
+          .then((fc) => {
+            if (cancelled) return;
+            setAksesibilitasFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat dataset aksesibilitas dari backend:", err);
+          });
+
+        fetchKepadatan()
+          .then((fc) => {
+            if (cancelled) return;
+            setKepadatanFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat titik observasi kepadatan dari backend:", err);
+          });
+
+        fetchFasilitasPendukung()
+          .then((fc) => {
+            if (cancelled) return;
+            setFasilitasPendukungFeatures((fc.features ?? []) as GeoJSON.Feature<GeoJSON.Point>[]);
+          })
+          .catch((err) => {
+            console.error("Gagal memuat dataset fasilitas pendukung dari backend:", err);
           });
 
         layerDefs.forEach((d) => {
@@ -457,6 +621,12 @@ export default function MapView({
               poiMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
               });
+              aksesibilitasMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+              fasilitasPendukungMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
             } else if (key === "reports") {
               reportMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
@@ -465,8 +635,23 @@ export default function MapView({
               halteMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
               });
+              titikTransferMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
             } else if (key === "becak") {
               becakMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            } else if (key === "trotoar") {
+              kondisiFasilitasMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+              waktuTempuhMarkersRef.current.forEach((m) => {
+                m.getElement().style.display = visible ? "" : "none";
+              });
+            }
+            if (key === "heatmap") {
+              kepadatanMarkersRef.current.forEach((m) => {
                 m.getElement().style.display = visible ? "" : "none";
               });
             }
@@ -558,6 +743,18 @@ export default function MapView({
       halteMarkersRef.current = [];
       becakMarkersRef.current.forEach((m) => m.remove());
       becakMarkersRef.current = [];
+      waktuTempuhMarkersRef.current.forEach((m) => m.remove());
+      waktuTempuhMarkersRef.current = [];
+      titikTransferMarkersRef.current.forEach((m) => m.remove());
+      titikTransferMarkersRef.current = [];
+      kondisiFasilitasMarkersRef.current.forEach((m) => m.remove());
+      kondisiFasilitasMarkersRef.current = [];
+      aksesibilitasMarkersRef.current.forEach((m) => m.remove());
+      aksesibilitasMarkersRef.current = [];
+      kepadatanMarkersRef.current.forEach((m) => m.remove());
+      kepadatanMarkersRef.current = [];
+      fasilitasPendukungMarkersRef.current.forEach((m) => m.remove());
+      fasilitasPendukungMarkersRef.current = [];
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       glMapRef.current?.remove();
@@ -687,6 +884,189 @@ export default function MapView({
       becakMarkersRef.current.push(marker);
     });
   }, [becakFeatures, mapReady]);
+
+  // 7 dataset survei lapangan asli (MAPID GeoServer) -- dipetakan ke toggle
+  // 6-layer PRD yang sudah ada (trotoar/halte/poi/heatmap), bukan toggle baru --
+  // lihat docs/PYTHON_API_CONTRACT.md Bagian 12c.
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    waktuTempuhMarkersRef.current.forEach((m) => m.remove());
+    waktuTempuhMarkersRef.current = [];
+
+    waktuTempuhFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Waktu Tempuh Jalan Kaki");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.background = "#0d9488";
+      el.innerHTML = `<span>${iconMarkup("footprints", { width: 14, height: 14, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.trotoar === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, WAKTU_TEMPUH_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      waktuTempuhMarkersRef.current.push(marker);
+    });
+  }, [waktuTempuhFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    titikTransferMarkersRef.current.forEach((m) => m.remove());
+    titikTransferMarkersRef.current = [];
+
+    titikTransferFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Titik Transfer Antarmoda");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.background = "#2563eb";
+      el.innerHTML = `<span>${iconMarkup("arrow-left-right", { width: 14, height: 14, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.halte === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, TITIK_TRANSFER_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      titikTransferMarkersRef.current.push(marker);
+    });
+  }, [titikTransferFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    kondisiFasilitasMarkersRef.current.forEach((m) => m.remove());
+    kondisiFasilitasMarkersRef.current = [];
+
+    kondisiFasilitasFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Kondisi Fasilitas");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "34px";
+      el.style.height = "34px";
+      el.style.background = "#f97316";
+      el.innerHTML = `<span>${iconMarkup("triangle-alert", { width: 16, height: 16, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.trotoar === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, KONDISI_FASILITAS_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      kondisiFasilitasMarkersRef.current.push(marker);
+    });
+  }, [kondisiFasilitasFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    aksesibilitasMarkersRef.current.forEach((m) => m.remove());
+    aksesibilitasMarkersRef.current = [];
+
+    aksesibilitasFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Fasilitas Aksesibilitas");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.background = "#16a34a";
+      el.innerHTML = `<span>${iconMarkup("accessibility", { width: 14, height: 14, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.poi === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, AKSESIBILITAS_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      aksesibilitasMarkersRef.current.push(marker);
+    });
+  }, [aksesibilitasFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    kepadatanMarkersRef.current.forEach((m) => m.remove());
+    kepadatanMarkersRef.current = [];
+
+    kepadatanFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Titik Observasi Kepadatan");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.background = "#dc2626";
+      el.innerHTML = `<span>${iconMarkup("users", { width: 14, height: 14, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.heatmap === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, KEPADATAN_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      kepadatanMarkersRef.current.push(marker);
+    });
+  }, [kepadatanFeatures, mapReady]);
+
+  useEffect(() => {
+    const maplibregl = glModuleRef.current;
+    const map = glMapRef.current;
+    if (!maplibregl || !map || !mapReady) return;
+
+    fasilitasPendukungMarkersRef.current.forEach((m) => m.remove());
+    fasilitasPendukungMarkersRef.current = [];
+
+    fasilitasPendukungFeatures.forEach((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const title = featureTitle(f.properties, "Fasilitas Pendukung");
+      const el = document.createElement("div");
+      el.className = "pin";
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.background = "#64748b";
+      el.innerHTML = `<span>${iconMarkup("wrench", { width: 14, height: 14, color: "#fff" })}</span>`;
+      if (layerVisibilityRef.current.poi === false) el.style.display = "none";
+
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        fieldsPopupHtml(f.properties, title, FASILITAS_PENDUKUNG_POPUP_FIELDS)
+      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .setPopup(popup)
+        .addTo(map);
+      fasilitasPendukungMarkersRef.current.push(marker);
+    });
+  }, [fasilitasPendukungFeatures, mapReady]);
 
   return (
     <>
