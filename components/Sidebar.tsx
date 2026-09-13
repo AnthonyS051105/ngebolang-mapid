@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Bike,
   Building2,
@@ -11,7 +12,6 @@ import {
   GraduationCap,
   Info,
   Landmark,
-  Leaf,
   Map,
   MessageSquare,
   ShieldCheck,
@@ -84,7 +84,13 @@ export default function Sidebar({
           title={collapsed ? "Perluas menu" : "Ciutkan menu"}
         >
           <div className="brand-logo">
-            <Leaf width={18} height={18} color="#ffffff" />
+            <Image
+              src="/ngebolang_mark.png"
+              alt="NGEBOLANG"
+              width={24}
+              height={24}
+              priority
+            />
           </div>
         </button>
         <div className="brand-text">
