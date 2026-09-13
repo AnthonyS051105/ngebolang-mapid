@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -9,7 +9,6 @@ import {
   MapPin,
   MessageCircle,
   Minus,
-  Sparkles,
   ThumbsUp,
 } from "lucide-react";
 import { categoryOf, tabKeyMap, tabs } from "@/lib/data";
@@ -18,19 +17,34 @@ import type { ThreadItem } from "@/lib/types/routingApi";
 
 interface FeedPanelProps {
   onOpenThread: (thread: ThreadItem) => void;
+  /** Buka tampilan "Lihat semua" (halaman penuh satu layar), bukan hanya
+   * memperluas panel kecil ini. */
+  onSeeAll: () => void;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   minimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
-  onOpenPlanner: () => void;
+  isMobile?: boolean;
+  /** Lebar (px) yang harus disisakan di sisi kanan -- dipakai saat AI Trip
+   * Planner docked-right, supaya kedua panel bersisian, bukan tumpang tindih.
+   * Feed Threads sendiri statis (tidak dockable), hanya lebarnya yang menyusut. */
+  reservedRightInset?: number;
 }
-
-const DRAG_OPEN_THRESHOLD = 40;
 
 const FALLBACK_PHOTO =
   "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800&q=80";
 
 type SortKey = "terbaru" | "populer";
+// 3 snap-point bottom sheet mobile: seberapa banyak sheet "terlihat" dari
+// bawah layar (px), bukan posisi absolut -- dihitung ulang saat resize lewat
+// window.innerHeight supaya tetap benar di semua tinggi layar.
+type SnapPoint = "collapsed" | "peek" | "full";
+const SNAP_VISIBLE_PX: Record<SnapPoint, number> = {
+  collapsed: 96,
+  peek: 320,
+  full: 0, // "full" dihitung relatif terhadap viewport, lihat snapVisiblePx()
+};
+const FULL_TOP_INSET = 96;
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -44,11 +58,13 @@ function timeAgo(iso: string): string {
 
 export default function FeedPanel({
   onOpenThread,
+  onSeeAll,
   expanded = false,
   onExpandedChange,
   minimized = false,
   onMinimizedChange,
-  onOpenPlanner,
+  isMobile = false,
+  reservedRightInset = 0,
 }: FeedPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [view, setView] = useState<"card" | "list">("card");
@@ -57,8 +73,19 @@ export default function FeedPanel({
   const [threads, setThreads] = useState<ThreadItem[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
-  const dragStartY = useRef<number | null>(null);
-  const dragStartExpanded = useRef(false);
+
+  const [snap, setSnap] = useState<SnapPoint>("peek");
+  const [dragVisiblePx, setDragVisiblePx] = useState<number | null>(null);
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const sheetDragRef = useRef<{ startY: number; startVisible: number } | null>(null);
+  // Lacak transisi prop `expanded` (dikendalikan navigasi eksternal, mis. tab
+  // "Feed" mobile) untuk menyesuaikan snap-point saat render, bukan lewat
+  // efek terpisah -- pola "adjust state during render" ala React docs.
+  const [prevExpanded, setPrevExpanded] = useState(expanded);
+  if (isMobile && prevExpanded !== expanded) {
+    setPrevExpanded(expanded);
+    setSnap(expanded ? "full" : "peek");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -98,29 +125,59 @@ export default function FeedPanel({
   };
 
   const handleSeeAll = () => {
-    setActiveTab("Semua");
-    setView("list");
-    onExpandedChange?.(true);
-    onMinimizedChange?.(false);
+    onSeeAll();
   };
 
-  // Drag handle: hanya aktif di mobile bottom-sheet (CSS mengabaikan
-  // transform ini di layar >768px karena .feed-panel tidak posisi bottom).
-  const handleDragStart = (clientY: number) => {
-    dragStartY.current = clientY;
-    dragStartExpanded.current = expanded;
-  };
-  const handleDragEnd = (clientY: number) => {
-    if (dragStartY.current === null) return;
-    const delta = dragStartY.current - clientY;
-    dragStartY.current = null;
-    if (Math.abs(delta) < DRAG_OPEN_THRESHOLD) {
-      // Tap singkat pada handle = toggle
-      onExpandedChange?.(!dragStartExpanded.current);
-      return;
+  // ---- Mobile bottom-sheet: drag real-time mengikuti jari, snap ke 3 titik
+  // (collapsed/peek/full) saat dilepas -- mirip bottom sheet Google Maps.
+  const snapVisiblePx = useCallback((point: SnapPoint) => {
+    if (point === "full") {
+      if (typeof window === "undefined") return 0;
+      return Math.max(0, window.innerHeight - FULL_TOP_INSET);
     }
-    onExpandedChange?.(delta > 0);
+    return SNAP_VISIBLE_PX[point];
+  }, []);
+
+  const handleSheetPointerDown = (e: React.PointerEvent) => {
+    if (!isMobile) return;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    sheetDragRef.current = { startY: e.clientY, startVisible: snapVisiblePx(snap) };
+    setIsDraggingSheet(true);
   };
+
+  const handleSheetPointerMove = (e: React.PointerEvent) => {
+    const drag = sheetDragRef.current;
+    if (!drag) return;
+    const dy = e.clientY - drag.startY;
+    const maxVisible = snapVisiblePx("full");
+    const nextVisible = Math.min(maxVisible, Math.max(0, drag.startVisible - dy));
+    setDragVisiblePx(nextVisible);
+  };
+
+  const handleSheetPointerUp = () => {
+    if (!sheetDragRef.current) return;
+    sheetDragRef.current = null;
+    setIsDraggingSheet(false);
+    const current = dragVisiblePx ?? snapVisiblePx(snap);
+    setDragVisiblePx(null);
+
+    const points: SnapPoint[] = ["collapsed", "peek", "full"];
+    let nearest: SnapPoint = "collapsed";
+    let bestDist = Infinity;
+    for (const p of points) {
+      const dist = Math.abs(snapVisiblePx(p) - current);
+      if (dist < bestDist) {
+        bestDist = dist;
+        nearest = p;
+      }
+    }
+    setSnap(nearest);
+    onExpandedChange?.(nearest === "full");
+  };
+
+  const sheetVisiblePx = dragVisiblePx ?? snapVisiblePx(snap);
+  const sheetHeight = snapVisiblePx("full");
+  const sheetTranslateY = isMobile ? Math.max(0, sheetHeight - sheetVisiblePx) : undefined;
 
   if (minimized) {
     return (
@@ -135,26 +192,11 @@ export default function FeedPanel({
     );
   }
 
-  return (
-    <div className={`feed-panel${expanded ? " expanded" : ""}`}>
-      <div
-        className="feed-sheet-handle"
-        onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
-        onTouchEnd={(e) => handleDragEnd(e.changedTouches[0].clientY)}
-        onMouseDown={(e) => handleDragStart(e.clientY)}
-        onMouseUp={(e) => handleDragEnd(e.clientY)}
-        role="button"
-        aria-label={expanded ? "Ciutkan bottom sheet feed" : "Perluas bottom sheet feed"}
-      >
-        <div className="feed-sheet-handle-bar" />
-      </div>
+  const body = (
+    <>
       <div className="feed-top">
         <h3>Feed Threads (Laporan Warga Terbaru)</h3>
         <div className="feed-top-actions">
-          <button type="button" className="feed-planner-trigger" onClick={onOpenPlanner}>
-            <Sparkles width={13} height={13} />
-            <span>AI Trip Planner</span>
-          </button>
           <button type="button" className="feed-see-all" onClick={handleSeeAll}>
             Lihat semua
           </button>
@@ -235,11 +277,7 @@ export default function FeedPanel({
             {list.map((t) => {
               const c = categoryOf(t.category);
               return (
-                <div
-                  className="fcard"
-                  key={t.id}
-                  onClick={() => onOpenThread(t)}
-                >
+                <div className="fcard" key={t.id} onClick={() => onOpenThread(t)}>
                   <div
                     className="thumb"
                     style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
@@ -258,9 +296,6 @@ export default function FeedPanel({
                       <span>
                         <ThumbsUp width={12} height={12} /> {t.upvotes}
                       </span>
-                      <span>
-                        <MessageCircle width={12} height={12} /> 0
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -274,11 +309,7 @@ export default function FeedPanel({
       ) : (
         <div className="feed-list">
           {list.map((t) => (
-            <div
-              className="feed-list-row"
-              key={t.id}
-              onClick={() => onOpenThread(t)}
-            >
+            <div className="feed-list-row" key={t.id} onClick={() => onOpenThread(t)}>
               <div
                 className="thumb-sm"
                 style={{ backgroundImage: `url(${t.photo_url ?? FALLBACK_PHOTO})` }}
@@ -296,6 +327,39 @@ export default function FeedPanel({
           ))}
         </div>
       )}
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <div
+        className={`feed-panel mobile-sheet${snap === "full" ? " expanded" : ""}${
+          isDraggingSheet ? " sheet-no-transition" : ""
+        }`}
+        style={{ transform: `translateY(${sheetTranslateY}px)`, height: sheetHeight }}
+      >
+        <div
+          className="feed-sheet-handle"
+          onPointerDown={handleSheetPointerDown}
+          onPointerMove={handleSheetPointerMove}
+          onPointerUp={handleSheetPointerUp}
+          onPointerCancel={handleSheetPointerUp}
+          role="button"
+          aria-label={snap === "full" ? "Ciutkan bottom sheet feed" : "Perluas bottom sheet feed"}
+        >
+          <div className="feed-sheet-handle-bar" />
+        </div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="feed-panel"
+      style={reservedRightInset > 0 ? { right: 18 + reservedRightInset } : undefined}
+    >
+      {body}
     </div>
   );
 }

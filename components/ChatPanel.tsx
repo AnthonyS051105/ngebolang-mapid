@@ -2,175 +2,50 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MessageCircleMore, Minus, Send, Sparkles, X } from "lucide-react";
-import { fetchChat, fetchRoute } from "@/lib/api/routingClient";
-import { getOrCreateChatSessionId } from "@/lib/api/chatSession";
 import type { RouteResponse } from "@/lib/types/routingApi";
-import ChatMessage, { type ChatMessageData } from "./ChatMessage";
+import type { ChatSessionState } from "@/lib/hooks/useChatSession";
+import ChatMessage from "./ChatMessage";
 import type { RouteDisplayOptions } from "./MapView";
-import RoutePreferencePanel, {
-  toPreferenceRequestFields,
-  type RoutePreferenceState,
-} from "./RoutePreferencePanel";
-
-function newId() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-const DEFAULT_PREFERENCE: RoutePreferenceState = {
-  preset: "seimbang",
-  walkOnly: false,
-  ramahAksesibilitas: false,
-};
+import RoutePreferencePanel from "./RoutePreferencePanel";
 
 interface ChatPanelProps {
+  session: ChatSessionState;
   onViewRouteOnMap?: (routeData: RouteResponse, options?: RouteDisplayOptions) => void;
   onMinimize?: () => void;
   onClose?: () => void;
+  /** Dipasang di header supaya panel bisa di-drag lewat DockablePanel (desktop). */
+  dragHandleProps?: { onPointerDown: (e: React.PointerEvent) => void };
 }
 
-export default function ChatPanel({ onViewRouteOnMap, onMinimize, onClose }: ChatPanelProps) {
-  const [sessionId, setSessionId] = useState("");
-  const [messages, setMessages] = useState<ChatMessageData[]>([]);
+export default function ChatPanel({
+  session,
+  onViewRouteOnMap,
+  onMinimize,
+  onClose,
+  dragHandleProps,
+}: ChatPanelProps) {
+  const {
+    messages,
+    isSending,
+    preference,
+    setPreference,
+    isRefetchingRoute,
+    sendMessage,
+    setActiveRouteMessageId,
+  } = session;
   const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [preference, setPreference] = useState<RoutePreferenceState>(DEFAULT_PREFERENCE);
-  const [isRefetchingRoute, setIsRefetchingRoute] = useState(false);
-  // id pesan asisten yang rutenya sedang tampil aktif di peta -- dipakai supaya
-  // toggle checkbox bisa langsung re-fetch /api/route dan update pesan + peta
-  // tanpa perlu user mengetik ulang pertanyaan.
-  const activeRouteMessageIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setSessionId(getOrCreateChatSessionId());
-  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    const activeId = activeRouteMessageIdRef.current;
-    if (!activeId) return;
-
-    const activeMessage = messages.find((m) => m.id === activeId);
-    const activeRoute = activeMessage?.routeData;
-    if (!activeRoute) return;
-
-    const nextOptions: RouteDisplayOptions = {
-      walkOnly: preference.walkOnly,
-      ramahAksesibilitas: preference.ramahAksesibilitas,
-    };
-
-    let cancelled = false;
-    setIsRefetchingRoute(true);
-
-    fetchRoute({
-      orig_lat: activeRoute.origin.lat,
-      orig_lon: activeRoute.origin.lon,
-      orig_name: activeRoute.origin.name,
-      dest_lat: activeRoute.destination.lat,
-      dest_lon: activeRoute.destination.lon,
-      dest_name: activeRoute.destination.name,
-      preference: preference.preset,
-      walk_only: preference.walkOnly,
-      ramah_aksesibilitas: preference.ramahAksesibilitas,
-    })
-      .then((updatedRoute) => {
-        if (cancelled) return;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === activeId
-              ? { ...m, routeData: updatedRoute, routeDisplayOptions: nextOptions }
-              : m
-          )
-        );
-        onViewRouteOnMap?.(updatedRoute, nextOptions);
-      })
-      .catch((err) => {
-        console.error("Gagal memperbarui rute dengan preferensi baru:", err);
-      })
-      .finally(() => {
-        if (!cancelled) setIsRefetchingRoute(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preference.walkOnly, preference.ramahAksesibilitas, preference.preset]);
-
-  async function sendMessage(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || isSending || !sessionId) return;
-
-    setMessages((prev) => [...prev, { id: newId(), role: "user", text: trimmed }]);
-    setInput("");
-    setIsSending(true);
-
-    try {
-      // Preferensi rute (preset + 2 toggle) disisipkan sebagai konteks tekstual,
-      // karena /api/chat menerima `message` bebas (bukan RouteRequestBody terstruktur) --
-      // backend tetap mem-parsing niat lewat LLM, lihat llmapp/agent.py.
-      const prefFields = toPreferenceRequestFields(preference);
-      const prefNote = [
-        `preferensi=${prefFields.preference}`,
-        prefFields.walk_only ? "jalan_kaki_saja" : null,
-        prefFields.ramah_aksesibilitas ? "ramah_aksesibilitas" : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
-      const messageWithPref = `${trimmed}\n\n[preferensi pengguna: ${prefNote}]`;
-
-      // Simpan preferensi yang dipakai SAAT pesan ini dikirim (bukan preferensi
-      // terkini di panel) supaya "Lihat di Peta" pada pesan lama tetap konsisten
-      // dengan indikator jalur yang ditampilkan.
-      const routeDisplayOptions: RouteDisplayOptions = {
-        walkOnly: prefFields.walk_only,
-        ramahAksesibilitas: prefFields.ramah_aksesibilitas,
-      };
-
-      const res = await fetchChat(messageWithPref, sessionId);
-      const assistantMessageId = newId();
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMessageId,
-          role: "assistant",
-          text: res.reply,
-          suggestions: res.suggestions,
-          routeData: res.route_data,
-          routeDisplayOptions,
-        },
-      ]);
-      // Rute baru dari chat otomatis jadi rute aktif -- toggle checkbox setelah
-      // ini akan langsung memperbarui rute ini via /api/route, tanpa chat ulang.
-      if (res.route_data) {
-        activeRouteMessageIdRef.current = assistantMessageId;
-      }
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: newId(),
-          role: "assistant",
-          text:
-            err instanceof Error
-              ? `Gagal menghubungi asisten: ${err.message}`
-              : "Gagal menghubungi asisten. Coba lagi.",
-          isError: true,
-        },
-      ]);
-    } finally {
-      setIsSending(false);
-    }
-  }
-
   return (
     <div className="chat-panel">
-      <div className="chat-panel-header">
+      <div
+        className={`chat-panel-header${dragHandleProps ? " panel-drag-handle" : ""}`}
+        {...dragHandleProps}
+      >
         <div className="ic">
           <Sparkles width={17} height={17} />
         </div>
@@ -217,10 +92,7 @@ export default function ChatPanel({ onViewRouteOnMap, onMinimize, onClose }: Cha
               <div className="ic">
                 <MessageCircleMore width={20} height={20} />
               </div>
-              <div className="title">Mulai rencanakan perjalananmu</div>
-              <div className="sub">
-                Coba ketik &quot;Dari Tugu ke Kraton&quot; untuk mulai merencanakan rute.
-              </div>
+              <div className="title">Rencanakan rute pertamamu</div>
             </div>
           )}
           {messages.map((m) => (
@@ -229,7 +101,7 @@ export default function ChatPanel({ onViewRouteOnMap, onMinimize, onClose }: Cha
               message={m}
               onSuggestionClick={sendMessage}
               onViewRouteOnMap={(routeData, options) => {
-                activeRouteMessageIdRef.current = m.id;
+                setActiveRouteMessageId(m.id);
                 onViewRouteOnMap?.(routeData, options);
               }}
             />
@@ -242,7 +114,9 @@ export default function ChatPanel({ onViewRouteOnMap, onMinimize, onClose }: Cha
         className="chat-input-row"
         onSubmit={(e) => {
           e.preventDefault();
-          sendMessage(input);
+          const text = input;
+          setInput("");
+          sendMessage(text);
         }}
       >
         <input

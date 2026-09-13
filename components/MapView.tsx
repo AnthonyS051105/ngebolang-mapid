@@ -153,6 +153,8 @@ interface MapViewProps {
   threadItems: ThreadItem[];
   onReady?: (handle: MapViewHandle) => void;
   onPoiClick?: (poi: PoiItem, x: number, y: number) => void;
+  onPoiMove?: (x: number, y: number) => void;
+  activePoiId?: string | null;
   onThreadClick?: (thread: ThreadItem) => void;
 }
 
@@ -188,6 +190,8 @@ export default function MapView({
   threadItems,
   onReady,
   onPoiClick,
+  onPoiMove,
+  activePoiId,
   onThreadClick,
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -201,6 +205,9 @@ export default function MapView({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const layerVisibilityRef = useRef<Record<string, boolean>>({});
   const onPoiClickRef = useRef(onPoiClick);
+  const onPoiMoveRef = useRef(onPoiMove);
+  const activePoiIdRef = useRef(activePoiId);
+  const poiItemsRef = useRef(poiItems);
   const onThreadClickRef = useRef(onThreadClick);
   const [activeRouteMode, setActiveRouteMode] = useState<"walk_only" | "accessible" | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -210,6 +217,18 @@ export default function MapView({
   useEffect(() => {
     onPoiClickRef.current = onPoiClick;
   }, [onPoiClick]);
+
+  useEffect(() => {
+    onPoiMoveRef.current = onPoiMove;
+  }, [onPoiMove]);
+
+  useEffect(() => {
+    activePoiIdRef.current = activePoiId;
+  }, [activePoiId]);
+
+  useEffect(() => {
+    poiItemsRef.current = poiItems;
+  }, [poiItems]);
 
   useEffect(() => {
     onThreadClickRef.current = onThreadClick;
@@ -234,6 +253,15 @@ export default function MapView({
 
       map.on("error", (e) => {
         console.error("Gagal memuat basemap MAPID:", e?.error ?? e);
+      });
+
+      map.on("move", () => {
+        const activeId = activePoiIdRef.current;
+        if (!activeId) return;
+        const poi = poiItemsRef.current.find((p) => p.id === activeId);
+        if (!poi) return;
+        const point = map.project([poi.lon, poi.lat]);
+        onPoiMoveRef.current?.(point.x, point.y - 20);
       });
 
       requestAnimationFrame(() => map.resize());

@@ -4,7 +4,6 @@ import {
   Bus,
   Car,
   ChevronsLeft,
-  ChevronsRight,
   Construction,
   Footprints,
   Info,
@@ -49,26 +48,37 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-logo">
-          <Leaf width={18} height={18} color="#ffffff" />
-        </div>
-        <div className="brand-text">
-          <div className="brand-name">NGEBOLANG</div>
-          <div className="brand-sub">Peta Sosial Mobilitas</div>
-        </div>
         <button
           type="button"
-          className="sidebar-collapse-icon-btn"
+          className="brand-logo-btn"
           onClick={onToggleCollapsed}
           aria-label={collapsed ? "Perluas menu" : "Ciutkan menu"}
           title={collapsed ? "Perluas menu" : "Ciutkan menu"}
         >
-          {collapsed ? (
-            <ChevronsRight width={16} height={16} />
-          ) : (
-            <ChevronsLeft width={16} height={16} />
-          )}
+          <div className="brand-logo">
+            <Leaf width={18} height={18} color="#ffffff" />
+          </div>
         </button>
+        <div className="brand-text">
+          <div className="brand-name">NGEBOLANG</div>
+          <div className="brand-sub">Peta Sosial Mobilitas</div>
+        </div>
+        {/* Saat collapsed, tombol ini disembunyikan supaya tidak menutupi
+            logo -- untuk memperluas menu lagi, klik logo (brand-logo-btn). */}
+        {!collapsed && (
+          <button
+            type="button"
+            className="sidebar-collapse-icon-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapsed();
+            }}
+            aria-label="Ciutkan menu"
+            title="Ciutkan menu"
+          >
+            <ChevronsLeft width={16} height={16} />
+          </button>
+        )}
       </div>
 
       <nav className="nav">

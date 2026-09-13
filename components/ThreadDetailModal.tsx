@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, ThumbsUp, X } from "lucide-react";
+import { MapPin, MessageCircle, Send, ThumbsUp, X } from "lucide-react";
 import { categoryOf } from "@/lib/data";
 import { ProxyApiError, upvoteThread } from "@/lib/api/threadsClient";
 import type { ThreadItem } from "@/lib/types/routingApi";
@@ -36,6 +36,9 @@ export default function ThreadDetailModal({
   const [voted, setVoted] = useState(false);
   const [voteMessage, setVoteMessage] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
+  // Backend belum punya endpoint komentar -- input ini murni UI, belum
+  // tersimpan kemana pun. Menyusul setelah mekanisme penyimpanannya siap.
+  const [commentDraft, setCommentDraft] = useState("");
   const c = categoryOf(report.category);
 
   const handleUpvote = async () => {
@@ -121,6 +124,30 @@ export default function ThreadDetailModal({
               {voteMessage}
             </div>
           )}
+
+          <div className="thread-comments-section">
+            <div className="thread-comments-label">
+              <MessageCircle width={14} height={14} /> Komentar
+            </div>
+            <div className="thread-comments-empty">Belum ada komentar.</div>
+            <form
+              className="comment-input-row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setCommentDraft("");
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Tulis komentar..."
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+              />
+              <button type="submit" className="comment-send" disabled={!commentDraft.trim()}>
+                <Send width={15} height={15} />
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

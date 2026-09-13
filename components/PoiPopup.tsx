@@ -17,8 +17,8 @@ export default function PoiPopup({ poi, x, y, onClose }: PoiPopupProps) {
       style={{ left: x, top: y, transform: "translate(-50%, -100%)" }}
     >
       <div className="photo poi-photo-fallback">
-        <div className="close" onClick={onClose}>
-          <X width={14} height={14} />
+        <div className="close" onClick={onClose} role="button" aria-label="Tutup">
+          <X width={19} height={19} />
         </div>
       </div>
       <div className="body">

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import Sidebar from "./Sidebar";
 import MapArea, { type MapAreaHandle } from "./MapArea";
 import ChatPanel from "./ChatPanel";
+import DockablePanel from "./DockablePanel";
 import ReportComposerModal from "./ReportComposerModal";
 import MobileBottomNav from "./MobileBottomNav";
+import { useChatSession } from "@/lib/hooks/useChatSession";
+import { useDockablePanel } from "@/lib/hooks/useDockablePanel";
 import type { RouteResponse } from "@/lib/types/routingApi";
 import type { RouteDisplayOptions } from "./MapView";
 
@@ -72,13 +76,32 @@ export default function AppShell({ user }: AppShellProps) {
     mapAreaRef.current?.showRoute(routeData, options);
   };
 
-  const appClassNames = [
-    "app",
-    collapsed && "sidebar-collapsed",
-    !plannerOpen && "planner-closed",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const chatSession = useChatSession(handleViewRouteOnMap);
+
+  const handleComposerSubmit = (text: string) => {
+    chatSession.sendMessage(text);
+    openPlanner();
+  };
+
+  const plannerPanel = useDockablePanel({
+    id: "ai-trip-planner",
+    initialDock: "right",
+    initialSize: { width: 380, height: 560 },
+    minSize: { width: 320, height: 420 },
+    maxSize: { width: 560, height: 900 },
+    allowedDocks: ["left", "right", "bottom", "float"],
+    disabled: isMobile,
+  });
+
+  // Feed Threads docked-bottom melebar penuh secara default -- kalau AI Trip
+  // Planner sedang docked-right, sisakan lebarnya supaya keduanya membentuk
+  // tata letak L-shape yang rapi, bukan tumpang tindih di pojok kanan-bawah.
+  const plannerRightInset =
+    plannerOpen && !isMobile && !plannerMinimized && plannerPanel.dock === "right"
+      ? plannerPanel.size.width
+      : 0;
+
+  const appClassNames = ["app", collapsed && "sidebar-collapsed"].filter(Boolean).join(" ");
 
   return (
     <div className={appClassNames}>
@@ -92,35 +115,41 @@ export default function AppShell({ user }: AppShellProps) {
       <MapArea
         ref={mapAreaRef}
         onOpenPlanner={openPlanner}
+        onComposerSubmit={handleComposerSubmit}
         feedExpanded={feedExpanded}
         onFeedExpandedChange={setFeedExpanded}
         feedMinimized={feedMinimized}
         onFeedMinimizedChange={setFeedMinimized}
-        onOpenPlannerFromFeed={openPlanner}
+        isMobile={isMobile}
+        feedReservedRightInset={plannerRightInset}
         user={user}
       />
 
-      {plannerOpen && !isMobile && (
-        <div className={`right-panel${plannerMinimized ? " minimized" : ""}`}>
-          {plannerMinimized ? (
-            <button
-              type="button"
-              className="right-panel-restore"
-              onClick={() => setPlannerMinimized(false)}
-            >
-              AI Trip Planner
-            </button>
-          ) : (
-            <ChatPanel
-              onViewRouteOnMap={handleViewRouteOnMap}
-              onMinimize={() => setPlannerMinimized(true)}
-              onClose={() => {
-                setPlannerOpen(false);
-                setPlannerMinimized(false);
-              }}
-            />
-          )}
-        </div>
+      {plannerOpen && !isMobile && plannerMinimized && (
+        <button
+          type="button"
+          className="panel-minimized-btn chat-panel-minimized-btn"
+          onClick={() => setPlannerMinimized(false)}
+          aria-label="Perluas AI Trip Planner"
+          title="AI Trip Planner"
+        >
+          <Sparkles width={18} height={18} />
+        </button>
+      )}
+
+      {plannerOpen && !isMobile && !plannerMinimized && (
+        <DockablePanel panel={plannerPanel} className="right-panel">
+          <ChatPanel
+            session={chatSession}
+            onViewRouteOnMap={handleViewRouteOnMap}
+            onMinimize={() => setPlannerMinimized(true)}
+            onClose={() => {
+              setPlannerOpen(false);
+              setPlannerMinimized(false);
+            }}
+            dragHandleProps={plannerPanel.dragHandleProps}
+          />
+        </DockablePanel>
       )}
 
       {showComposer && (
@@ -133,6 +162,7 @@ export default function AppShell({ user }: AppShellProps) {
       {showMobileChat && isMobile && (
         <div className="mobile-chat-overlay">
           <ChatPanel
+            session={chatSession}
             onViewRouteOnMap={(routeData, options) => {
               handleViewRouteOnMap(routeData, options);
               closeMobileChat();
