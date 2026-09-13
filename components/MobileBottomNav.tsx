@@ -9,8 +9,9 @@ interface MobileBottomNavProps {
 }
 
 // Navbar mobile sengaja hanya 3 item (Peta / Buat Laporan / Feed) -- AI Trip
-// Planner dibuka dari search-card di top-bar peta, atau dari tombol khusus
-// di atas panel Feed, bukan dari tab navbar (permintaan eksplisit user).
+// Planner dibuka dari search-card di top-bar peta, atau dari tombol
+// mengambang terpisah (chat-panel-minimized-btn-mobile, lihat AppShell.tsx)
+// di bawah cluster zoom, bukan dari tab navbar (permintaan eksplisit user).
 export default function MobileBottomNav({
   active,
   onNavigate,

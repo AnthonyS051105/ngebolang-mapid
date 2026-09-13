@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import Sidebar from "./Sidebar";
 import MapArea, { type MapAreaHandle } from "./MapArea";
@@ -38,6 +38,17 @@ export default function AppShell({ user }: AppShellProps) {
   const [feedExpanded, setFeedExpanded] = useState(false);
   const [feedMinimized, setFeedMinimized] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // Mobile only -- tinggi bottom sheet Feed yang sedang terlihat (px dari
+  // bawah layar) & tinggi viewport saat itu, dilaporkan real-time oleh
+  // FeedPanel (termasuk selama drag) supaya tombol AI Trip Planner mengambang
+  // bisa selalu mengikuti tepi atas sheet, lihat mobileAiBtnStyle di bawah.
+  const [feedSheetVisiblePx, setFeedSheetVisiblePx] = useState(320);
+  const [feedSheetViewportH, setFeedSheetViewportH] = useState(0);
+  const [feedSheetDragging, setFeedSheetDragging] = useState(false);
+  // Overlay "Lihat semua" (FeedFullScreen, dikelola MapArea) -- dilacak di
+  // sini juga (bukan cuma di dalam MapArea) supaya tab "Feed Threads" di
+  // sidebar ikut ter-highlight selama overlay itu terbuka.
+  const [feedFullScreen, setFeedFullScreen] = useState(false);
   const mapAreaRef = useRef<MapAreaHandle | null>(null);
 
   // AI Trip Planner dirender sebagai SALAH SATU dari dua bentuk berdasar
@@ -74,6 +85,20 @@ export default function AppShell({ user }: AppShellProps) {
     }
     if (key === "peta") setFeedExpanded(false);
   };
+
+  // Referensi fungsi ini HARUS stabil (useCallback, bukan arrow function baru
+  // tiap render) -- diteruskan sampai ke dalam dependency array useEffect di
+  // FeedPanel, jadi kalau referensinya berubah tiap render, efek itu akan
+  // terus-menerus re-fire -> setState di sini -> re-render AppShell -> fungsi
+  // baru lagi -> Maximum update depth exceeded (infinite loop).
+  const handleFeedSheetVisibleChange = useCallback(
+    (visiblePx: number, viewportHeight: number, dragging: boolean) => {
+      setFeedSheetVisiblePx(visiblePx);
+      setFeedSheetViewportH(viewportHeight);
+      setFeedSheetDragging(dragging);
+    },
+    []
+  );
 
   const handleViewRouteOnMap = (routeData: RouteResponse, options?: RouteDisplayOptions) => {
     mapAreaRef.current?.showRoute(routeData, options);
@@ -112,10 +137,64 @@ export default function AppShell({ user }: AppShellProps) {
 
   const appClassNames = ["app", collapsed && "sidebar-collapsed"].filter(Boolean).join(" ");
 
+  // Highlight tab sidebar mengikuti apa yang SEDANG terlihat oleh pengguna,
+  // bukan cuma navigasi terakhir lewat klik sidebar/navbar -- "Feed Threads"
+  // menyala kalau overlay "Lihat semua" terbuka (desktop/tablet/mobile),
+  // "AI Trip Planner" menyala selama panelnya terlihat & tidak diciutkan
+  // (desktop/tablet: right-panel; mobile: overlay penuh layar). Aturan
+  // sederhana & stabil: visible = aktif, bukan berbasis fokus/ketikan.
+  const isPlannerVisible = isMobile
+    ? showMobileChat
+    : plannerOpen && !plannerMinimized;
+  const sidebarActive = feedFullScreen
+    ? "feed"
+    : isPlannerVisible
+      ? "planner"
+      : active;
+
+  // Mobile: tombol AI Trip Planner mengambang HARUS selalu ada di atas tepi
+  // atas bottom sheet Feed & di bawah cluster zoom (bottom:50vh, lihat
+  // globals.css) SELAMA sheet belum menyentuh cluster itu -- begitu tepi
+  // atas sheet (+ jarak aman) sampai di tepi bawah cluster, tombol pindah ke
+  // posisi tetap di pojok kanan-bawah. Sengaja TIDAK dipatok ke suatu nilai
+  // maksimum yang lebih rendah dari titik peralihan ini -- itulah yang
+  // sebelumnya bikin tombol berhenti bergerak ("tidak relatif lagi") jauh
+  // sebelum sheet benar-benar sampai di ambang.
+  const MOBILE_CLUSTER_BOTTOM_RATIO = 0.5;
+  const MOBILE_GAP = 14;
+  const mobileClusterBottomOffset =
+    feedSheetViewportH * MOBILE_CLUSTER_BOTTOM_RATIO;
+  const isFeedSheetNearCluster =
+    feedSheetViewportH > 0 &&
+    feedSheetVisiblePx + MOBILE_GAP >= mobileClusterBottomOffset;
+  // Posisi "diam di pojok" adalah titik jangkar TETAP (sama persis dengan
+  // bottom CSS .chat-panel-minimized-btn-mobile) -- posisi mengambang di
+  // atas sheet dicapai lewat transform:translateY() relatif ke jangkar itu,
+  // BUKAN dengan mengubah-ubah `bottom` tiap frame. Alasan: `bottom` memicu
+  // reflow/layout tiap kali berubah (dianimasikan oleh browser di main
+  // thread, gampang patah-patah/tersendat), sedangkan `transform` dikerjakan
+  // compositor thread (GPU) sehingga animasinya jauh lebih mulus -- inilah
+  // yang bikin transisi sebelumnya (animasi properti `bottom`) terasa kurang
+  // halus meski durasi & easing-nya sudah benar.
+  const MOBILE_AI_BTN_CORNER_BOTTOM = 140;
+  const mobileAiBtnTranslateY = isFeedSheetNearCluster
+    ? 0
+    : -(feedSheetVisiblePx + MOBILE_GAP - MOBILE_AI_BTN_CORNER_BOTTOM);
+  // Selama drag berlangsung, tombol harus mengikuti jari persis tanpa lag --
+  // transisi CSS (lihat .chat-panel-minimized-btn-mobile) dinonaktifkan di
+  // sini lewat transitionDuration:"0s", dan hanya aktif lagi setelah jari
+  // dilepas (dragging=false) supaya perpindahan diskrit ke/dari pojok terasa
+  // halus, bukan "berkedip" tiba-tiba pindah tempat.
+  const mobileAiBtnStyle: React.CSSProperties = {
+    transitionDuration: feedSheetDragging ? "0s" : undefined,
+  };
+  (mobileAiBtnStyle as React.CSSProperties & Record<string, string>)["--pos-y"] =
+    `${mobileAiBtnTranslateY}px`;
+
   return (
     <div className={appClassNames}>
       <Sidebar
-        active={active}
+        active={sidebarActive}
         onNavigate={handleNavigate}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((v) => !v)}
@@ -136,13 +215,15 @@ export default function AppShell({ user }: AppShellProps) {
         plannerPanelWidth={plannerPanel.size.width}
         threads={threadsFeed.threads}
         onThreadUpvoted={threadsFeed.applyUpvote}
+        onFeedSheetVisibleChange={handleFeedSheetVisibleChange}
+        onFeedFullScreenChange={setFeedFullScreen}
       />
 
       {(!plannerOpen || plannerMinimized) && !isMobile && (
         <button
           type="button"
           className="panel-minimized-btn chat-panel-minimized-btn"
-          style={{ bottom: !feedMinimized ? 285 : 86 }}
+          style={{ bottom: !feedMinimized ? 501 : 239 }}
           onClick={() => {
             if (plannerClosedByX || !plannerOpen) {
               setPlannerOpen(true);
@@ -155,6 +236,19 @@ export default function AppShell({ user }: AppShellProps) {
               chatSession.openChatView();
             }
           }}
+          aria-label="Buka AI Trip Planner"
+          title="AI Trip Planner"
+        >
+          <Sparkles width={18} height={18} />
+        </button>
+      )}
+
+      {!showMobileChat && isMobile && (
+        <button
+          type="button"
+          className="panel-minimized-btn chat-panel-minimized-btn-mobile"
+          style={mobileAiBtnStyle}
+          onClick={openPlanner}
           aria-label="Buka AI Trip Planner"
           title="AI Trip Planner"
         >

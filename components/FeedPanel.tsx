@@ -33,22 +33,36 @@ interface FeedPanelProps {
   plannerOpen?: boolean;
   /** Lebar panel AI (px) -- restore-button feed digeser ke kirinya. */
   plannerPanelWidth?: number;
+  /** Mobile only -- dipanggil tiap kali tinggi bottom sheet yang terlihat
+   * berubah (termasuk real-time selama drag), supaya tombol AI Trip Planner
+   * mengambang bisa ikut mengikuti tepi atas sheet. `dragging` true selama
+   * gestur drag berlangsung -- dipakai supaya AppShell bisa menonaktifkan
+   * transisi CSS tombol saat itu (tombol harus mengikuti jari persis,
+   * transisi cuma untuk perpindahan diskrit seperti lepas jari / snap). */
+  onSheetVisibleChange?: (
+    visiblePx: number,
+    viewportHeight: number,
+    dragging: boolean
+  ) => void;
 }
 
 const FALLBACK_PHOTO =
   "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800&q=80";
 
 type SortKey = "terbaru" | "populer";
-// 3 snap-point bottom sheet mobile: seberapa banyak sheet "terlihat" dari
-// bawah layar (px), bukan posisi absolut -- dihitung ulang saat resize lewat
-// window.innerHeight supaya tetap benar di semua tinggi layar.
+// Bottom sheet mobile bisa di-drag bebas ke tinggi berapa pun (tidak lagi
+// dikunci ke 3 titik tetap) -- "collapsed" & "peek" di bawah cuma dipakai
+// sebagai titik snap AWAL/hasil ketuk navbar, bukan satu-satunya posisi valid.
+// "full" berarti benar-benar menutup seluruh layar (top:0, tanpa gap).
 type SnapPoint = "collapsed" | "peek" | "full";
 const SNAP_VISIBLE_PX: Record<SnapPoint, number> = {
   collapsed: 96,
   peek: 320,
   full: 0, // "full" dihitung relatif terhadap viewport, lihat snapVisiblePx()
 };
-const FULL_TOP_INSET = 96;
+// Seberapa dekat (px) ke titik collapsed/full sebelum drag "menempel" ke sana
+// saat dilepas -- di luar rentang ini, sheet tetap di posisi bebas hasil drag.
+const EDGE_SNAP_THRESHOLD = 40;
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -72,6 +86,7 @@ export default function FeedPanel({
   reservedRightInset = 0,
   plannerOpen = false,
   plannerPanelWidth = 0,
+  onSheetVisibleChange,
 }: FeedPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("Semua");
   const [view, setView] = useState<"card" | "list">("card");
@@ -80,6 +95,11 @@ export default function FeedPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
 
+  // Tinggi sheet yang terlihat (px dari bawah layar) -- state kontinu, bukan
+  // dikunci ke 3 titik tetap, supaya sheet bisa berhenti di posisi bebas
+  // sesuai preferensi drag pengguna. `snap` di bawah hanya label titik
+  // terakhir yang "ditempeli" (dipakai utamanya oleh navbar "Feed").
+  const [visiblePx, setVisiblePx] = useState<number>(SNAP_VISIBLE_PX.peek);
   const [snap, setSnap] = useState<SnapPoint>("peek");
   const [dragVisiblePx, setDragVisiblePx] = useState<number | null>(null);
   const [isDraggingSheet, setIsDraggingSheet] = useState(false);
@@ -91,6 +111,13 @@ export default function FeedPanel({
   if (isMobile && prevExpanded !== expanded) {
     setPrevExpanded(expanded);
     setSnap(expanded ? "full" : "peek");
+    setVisiblePx(
+      expanded
+        ? typeof window !== "undefined"
+          ? window.innerHeight
+          : SNAP_VISIBLE_PX.full
+        : SNAP_VISIBLE_PX.peek
+    );
   }
 
   useEffect(() => {
@@ -120,20 +147,26 @@ export default function FeedPanel({
     onSeeAll();
   };
 
-  // ---- Mobile bottom-sheet: drag real-time mengikuti jari, snap ke 3 titik
-  // (collapsed/peek/full) saat dilepas -- mirip bottom sheet Google Maps.
-  const snapVisiblePx = useCallback((point: SnapPoint) => {
-    if (point === "full") {
-      if (typeof window === "undefined") return 0;
-      return Math.max(0, window.innerHeight - FULL_TOP_INSET);
-    }
-    return SNAP_VISIBLE_PX[point];
+  // ---- Mobile bottom-sheet: drag bebas mengikuti jari secara real-time,
+  // berhenti di posisi manapun saat dilepas -- hanya "menempel" ke
+  // collapsed/full kalau dilepas cukup dekat (EDGE_SNAP_THRESHOLD) dengan
+  // salah satu ujung itu, mirip bottom sheet Google Maps versi longgar.
+  const fullVisiblePx = useCallback(() => {
+    if (typeof window === "undefined") return SNAP_VISIBLE_PX.full;
+    return window.innerHeight;
   }, []);
 
   const handleSheetPointerDown = (e: React.PointerEvent) => {
     if (!isMobile) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    sheetDragRef.current = { startY: e.clientY, startVisible: snapVisiblePx(snap) };
+    // setPointerCapture bisa gagal (mis. event bukan pointer aktif yang
+    // sesungguhnya, terjadi di sebagian alat testing/emulasi) -- drag tetap
+    // jalan lewat listener pointermove/up di window, jadi aman diabaikan.
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // sengaja diabaikan
+    }
+    sheetDragRef.current = { startY: e.clientY, startVisible: visiblePx };
     setIsDraggingSheet(true);
   };
 
@@ -141,35 +174,46 @@ export default function FeedPanel({
     const drag = sheetDragRef.current;
     if (!drag) return;
     const dy = e.clientY - drag.startY;
-    const maxVisible = snapVisiblePx("full");
-    const nextVisible = Math.min(maxVisible, Math.max(0, drag.startVisible - dy));
+    const maxVisible = fullVisiblePx();
+    const nextVisible = Math.min(
+      maxVisible,
+      Math.max(SNAP_VISIBLE_PX.collapsed, drag.startVisible - dy)
+    );
     setDragVisiblePx(nextVisible);
+    onSheetVisibleChange?.(nextVisible, maxVisible, true);
   };
 
   const handleSheetPointerUp = () => {
     if (!sheetDragRef.current) return;
     sheetDragRef.current = null;
     setIsDraggingSheet(false);
-    const current = dragVisiblePx ?? snapVisiblePx(snap);
+    const current = dragVisiblePx ?? visiblePx;
     setDragVisiblePx(null);
 
-    const points: SnapPoint[] = ["collapsed", "peek", "full"];
-    let nearest: SnapPoint = "collapsed";
-    let bestDist = Infinity;
-    for (const p of points) {
-      const dist = Math.abs(snapVisiblePx(p) - current);
-      if (dist < bestDist) {
-        bestDist = dist;
-        nearest = p;
-      }
+    const maxVisible = fullVisiblePx();
+    let resolved = current;
+    let resolvedSnap: SnapPoint = "peek";
+    if (Math.abs(current - SNAP_VISIBLE_PX.collapsed) <= EDGE_SNAP_THRESHOLD) {
+      resolved = SNAP_VISIBLE_PX.collapsed;
+      resolvedSnap = "collapsed";
+    } else if (Math.abs(current - maxVisible) <= EDGE_SNAP_THRESHOLD) {
+      resolved = maxVisible;
+      resolvedSnap = "full";
     }
-    setSnap(nearest);
-    onExpandedChange?.(nearest === "full");
+    setVisiblePx(resolved);
+    setSnap(resolvedSnap);
+    onExpandedChange?.(resolvedSnap === "full");
+    onSheetVisibleChange?.(resolved, maxVisible, false);
   };
 
-  const sheetVisiblePx = dragVisiblePx ?? snapVisiblePx(snap);
-  const sheetHeight = snapVisiblePx("full");
+  const sheetVisiblePx = dragVisiblePx ?? visiblePx;
+  const sheetHeight = fullVisiblePx();
   const sheetTranslateY = isMobile ? Math.max(0, sheetHeight - sheetVisiblePx) : undefined;
+
+  useEffect(() => {
+    if (!isMobile) return;
+    onSheetVisibleChange?.(sheetVisiblePx, sheetHeight, isDraggingSheet);
+  }, [isMobile, sheetVisiblePx, sheetHeight, isDraggingSheet, onSheetVisibleChange]);
 
   if (minimized) {
     // Kalau planner terbuka di kanan, geser tombol restore ke kirinya

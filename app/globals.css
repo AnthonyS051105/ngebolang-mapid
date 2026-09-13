@@ -2510,6 +2510,15 @@ svg.lucide {
   }
 }
 
+/* Tombol AI Trip Planner versi mobile -- disembunyikan di desktop/tablet,
+   ditampilkan & diposisikan lewat media query 600px di bawah, di bawah
+   cluster zoom dan di atas navbar. Deklarasi dasar (hidden) ditaruh di sini,
+   SEBELUM media query mobile, supaya urutan cascade tidak menimpanya. */
+.chat-panel-minimized-btn-mobile {
+  display: none;
+  color: var(--green);
+}
+
 /* ============ MOBILE (<=768px) ============
    Sidebar and right panel are replaced entirely: bottom tab bar for
    navigation, a draggable bottom sheet for the feed (never fully hidden),
@@ -2561,13 +2570,48 @@ svg.lucide {
   .basemap-pill {
     display: none;
   }
+  /* Cluster zoom digeser ke ~50% tinggi layar -- cukup mudah dijangkau ibu
+     jari (tidak terlalu ke atas), sekaligus menyisakan celah tetap di antara
+     cluster & tepi atas bottom sheet Feed (collapsed 96px s/d ambang 50%),
+     tempat tombol AI Trip Planner mengambang berdiri (lihat
+     .chat-panel-minimized-btn-mobile & mobileAiBtnStyle di AppShell.tsx). */
   .map-controls-cluster {
-    bottom: 116px;
+    bottom: 50vh;
     right: 14px;
   }
   .map-controls-cluster .ctrl-btn {
     width: 44px;
     height: 44px;
+  }
+  .chat-panel-minimized-btn-mobile {
+    display: flex;
+    right: 14px;
+    /* Tidak mepet pojok sekali -- dinaikkan cukup jauh dari navbar supaya
+       nyaman dijangkau ibu jari, sekaligus tetap terasa "di pojok
+       kanan-bawah" seperti diminta. Ini titik jangkar TETAP -- posisi
+       mengambang di atas sheet dicapai lewat transform:translateY() relatif
+       ke jangkar ini (lihat mobileAiBtnStyle di AppShell.tsx), bukan dengan
+       mengubah `bottom` tiap frame (reflow, gampang tersendat). */
+    bottom: calc(140px + env(safe-area-inset-bottom));
+    /* Variabel kosong sebagai basis transform posisi -- diisi lewat inline
+       style dari AppShell.tsx (translateY naik/turun mengikuti sheet).
+       Hover/active di bawah menambahkan translateY/scale TAMBAHAN lewat
+       calc() supaya tidak saling menimpa dengan transform posisi ini. */
+    --pos-y: 0px;
+    transform: translateY(var(--pos-y));
+  }
+  /* Selector gabungan (2 class) supaya specificity-nya lebih tinggi dari
+     .panel-minimized-btn biasa (yang juga mendefinisikan `transition` untuk
+     box-shadow/transform saat hover, & ada lebih akhir di file ini) --
+     tanpa ini shorthand `transition` di atas keseluruhannya kalah/tertimpa. */
+  .panel-minimized-btn.chat-panel-minimized-btn-mobile {
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.15s;
+  }
+  .panel-minimized-btn.chat-panel-minimized-btn-mobile:hover {
+    transform: translateY(calc(var(--pos-y) - 1px)) scale(1.03);
+  }
+  .panel-minimized-btn.chat-panel-minimized-btn-mobile:active {
+    transform: translateY(var(--pos-y)) scale(0.95);
   }
   .scale-tag {
     display: none;
@@ -2640,9 +2684,32 @@ svg.lucide {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    align-items: flex-start;
   }
   .feed-panel .feed-list {
     max-height: none;
+  }
+  /* Kartu mobile: 1 kolom penuh, scroll VERTIKAL (gaya feed IG) -- bukan
+     scroll horizontal seperti desktop, supaya searah dengan gestur drag
+     bottom sheet itu sendiri & tiap kartu cukup lebar untuk judul/badge/
+     info pelapor tanpa terlalu padat. */
+  .feed-panel .feed-cards-wrap {
+    display: block;
+  }
+  .feed-panel .feed-scroll-btn {
+    display: none;
+  }
+  .feed-panel .feed-cards {
+    display: flex;
+    flex-direction: column;
+    overflow-x: visible;
+    gap: 12px;
+  }
+  .feed-panel .fcard {
+    width: 100%;
+  }
+  .feed-panel .fcard .thumb {
+    height: 140px;
   }
 
   /* ---- Bottom nav: primary mobile navigation ---- */

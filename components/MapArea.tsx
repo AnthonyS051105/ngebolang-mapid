@@ -19,10 +19,7 @@ import {
 } from "lucide-react";
 import { layerDefs as initialLayerDefs } from "@/lib/data";
 import type { LayerDef } from "@/lib/types";
-import {
-  fetchPoi,
-  getExportReportsUrl,
-} from "@/lib/api/routingClient";
+import { fetchPoi, getExportReportsUrl } from "@/lib/api/routingClient";
 import type {
   PoiItem,
   RouteResponse,
@@ -63,6 +60,18 @@ interface MapAreaProps {
    * konsisten tanpa fetch duplikat. */
   threads: ThreadItem[];
   onThreadUpvoted: (id: string, upvotes: number) => void;
+  /** Mobile only -- diteruskan apa adanya dari FeedPanel ke AppShell supaya
+   * tombol AI Trip Planner mengambang bisa mengikuti tepi atas bottom sheet.
+   * `dragging` dipakai AppShell untuk menonaktifkan transisi CSS tombol
+   * selama gestur drag (biar mengikuti jari persis, tanpa lag animasi). */
+  onFeedSheetVisibleChange?: (
+    visiblePx: number,
+    viewportHeight: number,
+    dragging: boolean
+  ) => void;
+  /** Dipanggil saat overlay "Lihat semua" (FeedFullScreen) dibuka/ditutup --
+   * dipakai AppShell supaya tab "Feed Threads" di sidebar ikut ter-highlight. */
+  onFeedFullScreenChange?: (open: boolean) => void;
 }
 
 function MapArea(
@@ -80,6 +89,8 @@ function MapArea(
     plannerPanelWidth = 0,
     threads,
     onThreadUpvoted,
+    onFeedSheetVisibleChange,
+    onFeedFullScreenChange,
   }: MapAreaProps,
   ref: React.Ref<MapAreaHandle>,
 ) {
@@ -116,8 +127,8 @@ function MapArea(
     id: "layer-card",
     initialDock: "float",
     initialPosition: { x: 18, y: 106 },
-    initialSize: { width: 245, height: 340 },
-    minSize: { width: 240, height: 300 },
+    initialSize: { width: 245, height: 300 },
+    minSize: { width: 240, height: 290 },
     maxSize: { width: 360, height: 520 },
     dockable: false,
     getBounds: () =>
@@ -321,11 +332,17 @@ function MapArea(
 
       <div
         className="map-controls-cluster"
-        style={{
-          right:
-            plannerOpen && plannerPanelWidth > 0 ? 18 + plannerPanelWidth : 18,
-          bottom: !feedMinimized ? 285 : 86,
-        }}
+        style={
+          isMobile
+            ? undefined
+            : {
+                right:
+                  plannerOpen && plannerPanelWidth > 0
+                    ? 18 + plannerPanelWidth
+                    : 18,
+                bottom: !feedMinimized ? 348 : 86,
+              }
+        }
       >
         <div
           className="ctrl-btn locate"
@@ -354,7 +371,10 @@ function MapArea(
       <FeedPanel
         threads={threads}
         onOpenThread={setActiveThread}
-        onSeeAll={() => setFeedFullScreen(true)}
+        onSeeAll={() => {
+          setFeedFullScreen(true);
+          onFeedFullScreenChange?.(true);
+        }}
         expanded={feedExpanded}
         onExpandedChange={onFeedExpandedChange}
         minimized={feedMinimized}
@@ -363,6 +383,7 @@ function MapArea(
         reservedRightInset={feedReservedRightInset}
         plannerOpen={plannerOpen}
         plannerPanelWidth={plannerPanelWidth}
+        onSheetVisibleChange={onFeedSheetVisibleChange}
       />
 
       <div className="map-footer">
@@ -383,7 +404,10 @@ function MapArea(
         <FeedFullScreen
           threads={threads}
           onOpenThread={setActiveThread}
-          onClose={() => setFeedFullScreen(false)}
+          onClose={() => {
+            setFeedFullScreen(false);
+            onFeedFullScreenChange?.(false);
+          }}
         />
       )}
 

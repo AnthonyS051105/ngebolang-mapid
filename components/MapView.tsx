@@ -275,6 +275,24 @@ export default function MapView({
         console.error("Gagal memuat basemap MAPID:", e?.error ?? e);
       });
 
+      // Style basemap MAPID (vendor pihak ketiga) mereferensikan beberapa
+      // ikon sprite (mis. "gate", "atm", "bollard") yang tidak ada di sprite
+      // sheet-nya sendiri -- di luar kendali kode ini. Daripada MapLibre
+      // mencetak warning "could not be loaded" berulang ke console, daftarkan
+      // gambar transparan 1x1 sebagai fallback begitu ada yang hilang (pola
+      // resmi yang disarankan lewat event ini) -- ikon itu memang tidak
+      // dirender apa pun sebelumnya, jadi tidak ada perubahan visual.
+      map.on("styleimagemissing", (e) => {
+        const id = e.id;
+        if (map.hasImage(id)) return;
+        const size = 1;
+        map.addImage(id, {
+          width: size,
+          height: size,
+          data: new Uint8Array(size * size * 4),
+        });
+      });
+
       map.on("move", () => {
         const activeId = activePoiIdRef.current;
         if (!activeId) return;
